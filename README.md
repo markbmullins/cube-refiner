@@ -43,12 +43,23 @@ Raw JSON snapshots and CSV files are still useful, but they are audit and export
 
 ## Development
 
+Requires Node.js 24 or newer. Cube Refiner uses Node's built-in `node:sqlite` module for the on-disk database layer.
+
 ```bash
 pnpm install
 pnpm check
 pnpm test
 pnpm build
 pnpm dev -- help
+```
+
+## Database Commands
+
+```bash
+pnpm dev -- db:init
+pnpm dev -- db:migrate
+pnpm dev -- db:reset
+pnpm dev -- db:init --db data/cube-refiner.sqlite
 ```
 
 ## Shared Contracts

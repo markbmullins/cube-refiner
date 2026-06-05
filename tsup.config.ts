@@ -7,5 +7,5 @@ export default defineConfig({
   format: ["esm"],
   sourcemap: true,
   splitting: false,
-  target: "node22"
+  target: "node24"
 });
