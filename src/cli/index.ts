@@ -39,7 +39,7 @@ import {
   parseMetagamePeriodModel,
   seedSetReleases
 } from "../periods.js";
-import { buildCardArchetypeMatrix, scoreCards } from "../scoring/index.js";
+import { buildCardArchetypeMatrix, buildPeriodMatrices, scoreCards } from "../scoring/index.js";
 import type { DeckSource } from "../types/contracts.js";
 
 const args = process.argv.slice(2);
@@ -81,6 +81,7 @@ Usage:
   cube-refiner periods:assign [--db path]
   cube-refiner coverage:historical [--db path] [--output-csv path] [--source-manifest path] [--min-decks n] [--pipeline-run-id id]
   cube-refiner matrix:build [--db path] [--matrix-csv path] [--archetypes-csv path] [--pipeline-run-id id]
+  cube-refiner matrix:periods [--db path] [--card-period-csv path] [--archetype-period-csv path] [--pipeline-run-id id]
   cube-refiner score:cards [--db path] --pipeline-run-id id [--glue-threshold n] [--signpost-affinity n] [--signpost-exclusivity n] [--signpost-min-decks n]
   cube-refiner candidates:generate [--db path] --pipeline-run-id id [--output-dir path]
   cube-refiner cube:generate [--db path] --pipeline-run-id id [--cube-run-id id] [--output-csv path]
@@ -337,6 +338,30 @@ if (command === "matrix:build") {
     }
     if (summary.archetypeSummaryCsvPath) {
       console.log(`Archetype summary CSV: ${summary.archetypeSummaryCsvPath}`);
+    }
+  } finally {
+    database.close();
+  }
+  process.exit(0);
+}
+
+if (command === "matrix:periods") {
+  const database = openDatabase({ path: databasePath });
+  try {
+    applyMigrations(database);
+    const summary = buildPeriodMatrices(database, {
+      archetypePeriodCoverageCsvPath: getOptionValue("--archetype-period-csv") ?? `${defaultProjectPaths.outputsDir}/archetype_period_coverage.csv`,
+      cardPeriodMatrixCsvPath: getOptionValue("--card-period-csv") ?? `${defaultProjectPaths.outputsDir}/card_period_matrix.csv`,
+      pipelineRunId: getOptionValue("--pipeline-run-id")
+    });
+    console.log(
+      `Built ${summary.cardRows} card/period rows and ${summary.archetypeRows} archetype/period rows for run ${summary.pipelineRunId}.`
+    );
+    if (summary.cardPeriodMatrixCsvPath) {
+      console.log(`Card period matrix CSV: ${summary.cardPeriodMatrixCsvPath}`);
+    }
+    if (summary.archetypePeriodCoverageCsvPath) {
+      console.log(`Archetype period coverage CSV: ${summary.archetypePeriodCoverageCsvPath}`);
     }
   } finally {
     database.close();

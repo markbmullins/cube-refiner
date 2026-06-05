@@ -118,6 +118,8 @@ Major outputs are written to `data/outputs/` by default:
 - `cards_ranked.csv`
 - `card_archetype_matrix.csv`
 - `archetypes_summary.csv`
+- `card_period_matrix.csv`
+- `archetype_period_coverage.csv`
 - `signpost_candidates.csv`
 - `glue_cards.csv`
 - `parasitic_review.csv`
@@ -200,9 +202,12 @@ Build the weighted card/archetype matrix and archetype summaries:
 ```bash
 pnpm matrix:build
 pnpm matrix:build -- --matrix-csv data/outputs/card_archetype_matrix.csv --archetypes-csv data/outputs/archetypes_summary.csv
+pnpm dev -- matrix:periods
 ```
 
 Matrix rows are persisted in SQLite by pipeline run id, and CSVs are exports from those persisted rows.
+
+`matrix:periods` builds the Historical Modern set-release-period inputs for downstream scoring. It writes `card_period_matrix.csv` with per-period weighted metagame share and `archetype_period_coverage.csv` with archetype presence, representative cards, and share of each set-release period.
 
 Score cards from a persisted matrix run:
 

@@ -366,6 +366,48 @@ CREATE INDEX IF NOT EXISTS idx_historical_source_coverage_period ON historical_s
 CREATE INDEX IF NOT EXISTS idx_historical_source_coverage_year ON historical_source_coverage(year, source);
 CREATE INDEX IF NOT EXISTS idx_historical_coverage_warnings_run ON historical_coverage_warnings(pipeline_run_id, period_id);
 `
+  },
+  {
+    description: "Period-aware card and archetype matrices",
+    id: "0006_period_matrices",
+    sql: `
+CREATE TABLE IF NOT EXISTS card_period_matrix (
+  pipeline_run_id TEXT NOT NULL REFERENCES pipeline_runs(id) ON DELETE CASCADE,
+  card_name TEXT NOT NULL,
+  period_id TEXT NOT NULL REFERENCES metagame_periods(period_id) ON DELETE CASCADE,
+  set_code TEXT NOT NULL,
+  set_name TEXT NOT NULL,
+  period_start_date TEXT NOT NULL,
+  period_end_date TEXT NOT NULL,
+  decks_with_card REAL NOT NULL,
+  total_decks_in_period REAL NOT NULL,
+  metagame_share REAL NOT NULL,
+  mainboard_copies REAL NOT NULL,
+  sideboard_copies REAL NOT NULL,
+  archetype_families_json TEXT NOT NULL DEFAULT '[]',
+  sort_order INTEGER NOT NULL,
+  PRIMARY KEY (pipeline_run_id, period_id, card_name)
+);
+
+CREATE TABLE IF NOT EXISTS archetype_period_summaries (
+  pipeline_run_id TEXT NOT NULL REFERENCES pipeline_runs(id) ON DELETE CASCADE,
+  archetype_family TEXT NOT NULL,
+  period_id TEXT NOT NULL REFERENCES metagame_periods(period_id) ON DELETE CASCADE,
+  set_code TEXT NOT NULL,
+  set_name TEXT NOT NULL,
+  period_start_date TEXT NOT NULL,
+  period_end_date TEXT NOT NULL,
+  total_deck_weight REAL NOT NULL,
+  unique_cards INTEGER NOT NULL,
+  representative_cards_json TEXT NOT NULL DEFAULT '[]',
+  period_metagame_share REAL NOT NULL,
+  sort_order INTEGER NOT NULL,
+  PRIMARY KEY (pipeline_run_id, period_id, archetype_family)
+);
+
+CREATE INDEX IF NOT EXISTS idx_card_period_matrix_period ON card_period_matrix(pipeline_run_id, sort_order, card_name);
+CREATE INDEX IF NOT EXISTS idx_archetype_period_summaries_period ON archetype_period_summaries(pipeline_run_id, sort_order, archetype_family);
+`
   }
 ];
 

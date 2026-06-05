@@ -186,3 +186,35 @@ export type HistoricalCoverageWarning = {
   readonly message: string;
   readonly metadata?: unknown;
 };
+
+export type CardPeriodMatrixRow = {
+  readonly pipelineRunId: string;
+  readonly cardName: string;
+  readonly periodId: string;
+  readonly setCode: string;
+  readonly setName: string;
+  readonly periodStartDate: string;
+  readonly periodEndDate: string;
+  readonly decksWithCard: number;
+  readonly totalDecksInPeriod: number;
+  readonly metagameShare: number;
+  readonly mainboardCopies: number;
+  readonly sideboardCopies: number;
+  readonly archetypeFamilies: readonly string[];
+  readonly sortOrder: number;
+};
+
+export type ArchetypePeriodSummaryRow = {
+  readonly pipelineRunId: string;
+  readonly archetypeFamily: string;
+  readonly periodId: string;
+  readonly setCode: string;
+  readonly setName: string;
+  readonly periodStartDate: string;
+  readonly periodEndDate: string;
+  readonly totalDeckWeight: number;
+  readonly uniqueCards: number;
+  readonly representativeCards: readonly string[];
+  readonly periodMetagameShare: number;
+  readonly sortOrder: number;
+};

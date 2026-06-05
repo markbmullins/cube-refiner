@@ -83,6 +83,8 @@ export function getDatabaseStatus(database: DatabaseSync): DatabaseStatusSummary
       "metagame_period_assignment_reviews",
       "historical_source_coverage",
       "historical_coverage_warnings",
+      "card_period_matrix",
+      "archetype_period_summaries",
       "output_artifacts"
     ].map((table) => [table, tableCount(database, table)])
   );

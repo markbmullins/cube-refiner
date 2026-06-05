@@ -3,7 +3,9 @@ import type { DatabaseSync } from "node:sqlite";
 
 import type {
   CandidatePool,
+  ArchetypePeriodSummaryRow,
   CardScoreRow,
+  CardPeriodMatrixRow,
   CubeCardRole,
   DeckCard,
   DeckSource,
@@ -138,6 +140,21 @@ export type HistoricalCoverageInputRecord = {
 export type HistoricalCoverageWarningRecord = HistoricalCoverageWarning & {
   readonly id: number;
   readonly createdAt: string;
+};
+
+export type PeriodMatrixInputRow = {
+  readonly deckId: string;
+  readonly periodId: string;
+  readonly setCode: string;
+  readonly setName: string;
+  readonly periodStartDate: string;
+  readonly periodEndDate: string;
+  readonly sortOrder: number;
+  readonly archetypeFamily: string;
+  readonly weight: number;
+  readonly zone: "mainboard" | "sideboard";
+  readonly cardName: string;
+  readonly copies: number;
 };
 
 export type DedupeClusterInput = {
@@ -1210,6 +1227,203 @@ export function listMatrixInputRows(database: DatabaseSync): readonly MatrixInpu
     deckId: String(row.deckId),
     weight: Number(row.weight),
     zone: String(row.zone) === "sideboard" ? "sideboard" : "mainboard"
+  }));
+}
+
+export function listPeriodMatrixInputRows(database: DatabaseSync): readonly PeriodMatrixInputRow[] {
+  const rows = database
+    .prepare(
+      `SELECT
+        nd.deck_id AS deckId,
+        mp.period_id AS periodId,
+        mp.set_code AS setCode,
+        mp.set_name AS setName,
+        mp.start_date AS periodStartDate,
+        mp.end_date AS periodEndDate,
+        mp.sort_order AS sortOrder,
+        nd.archetype_family AS archetypeFamily,
+        COALESCE(dw.weight, nd.weight) AS weight,
+        ndc.zone AS zone,
+        ndc.card_name AS cardName,
+        ndc.copies AS copies
+      FROM deck_metagame_periods dmp
+      JOIN metagame_periods mp ON mp.period_id = dmp.period_id
+      JOIN normalized_decks nd ON nd.deck_id = dmp.deck_id
+      JOIN normalized_deck_cards ndc ON ndc.deck_id = nd.deck_id
+      LEFT JOIN deck_weights dw ON dw.deck_id = nd.deck_id
+      ORDER BY mp.sort_order, nd.archetype_family, nd.deck_id, ndc.zone, ndc.position`
+    )
+    .all();
+
+  return rows.map((row) => ({
+    archetypeFamily: String(row.archetypeFamily),
+    cardName: String(row.cardName),
+    copies: Number(row.copies),
+    deckId: String(row.deckId),
+    periodEndDate: String(row.periodEndDate),
+    periodId: String(row.periodId),
+    periodStartDate: String(row.periodStartDate),
+    setCode: String(row.setCode),
+    setName: String(row.setName),
+    sortOrder: Number(row.sortOrder),
+    weight: Number(row.weight),
+    zone: String(row.zone) === "sideboard" ? "sideboard" : "mainboard"
+  }));
+}
+
+export function replacePeriodMatrixRows(
+  database: DatabaseSync,
+  pipelineRunId: string,
+  cardRows: readonly CardPeriodMatrixRow[],
+  archetypeRows: readonly ArchetypePeriodSummaryRow[]
+): void {
+  database.exec("BEGIN;");
+  try {
+    database.prepare("DELETE FROM card_period_matrix WHERE pipeline_run_id = ?").run(pipelineRunId);
+    database.prepare("DELETE FROM archetype_period_summaries WHERE pipeline_run_id = ?").run(pipelineRunId);
+
+    const insertCard = database.prepare(
+      `INSERT INTO card_period_matrix (
+        pipeline_run_id, card_name, period_id, set_code, set_name, period_start_date,
+        period_end_date, decks_with_card, total_decks_in_period, metagame_share,
+        mainboard_copies, sideboard_copies, archetype_families_json, sort_order
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    );
+    for (const row of cardRows) {
+      insertCard.run(
+        row.pipelineRunId,
+        row.cardName,
+        row.periodId,
+        row.setCode,
+        row.setName,
+        row.periodStartDate,
+        row.periodEndDate,
+        row.decksWithCard,
+        row.totalDecksInPeriod,
+        row.metagameShare,
+        row.mainboardCopies,
+        row.sideboardCopies,
+        JSON.stringify(row.archetypeFamilies),
+        row.sortOrder
+      );
+    }
+
+    const insertArchetype = database.prepare(
+      `INSERT INTO archetype_period_summaries (
+        pipeline_run_id, archetype_family, period_id, set_code, set_name,
+        period_start_date, period_end_date, total_deck_weight, unique_cards,
+        representative_cards_json, period_metagame_share, sort_order
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    );
+    for (const row of archetypeRows) {
+      insertArchetype.run(
+        row.pipelineRunId,
+        row.archetypeFamily,
+        row.periodId,
+        row.setCode,
+        row.setName,
+        row.periodStartDate,
+        row.periodEndDate,
+        row.totalDeckWeight,
+        row.uniqueCards,
+        JSON.stringify(row.representativeCards),
+        row.periodMetagameShare,
+        row.sortOrder
+      );
+    }
+
+    database.exec("COMMIT;");
+  } catch (error) {
+    database.exec("ROLLBACK;");
+    throw error;
+  }
+}
+
+export function listPersistedCardPeriodMatrixRows(
+  database: DatabaseSync,
+  pipelineRunId: string
+): readonly CardPeriodMatrixRow[] {
+  const rows = database
+    .prepare(
+      `SELECT
+        pipeline_run_id AS pipelineRunId,
+        card_name AS cardName,
+        period_id AS periodId,
+        set_code AS setCode,
+        set_name AS setName,
+        period_start_date AS periodStartDate,
+        period_end_date AS periodEndDate,
+        decks_with_card AS decksWithCard,
+        total_decks_in_period AS totalDecksInPeriod,
+        metagame_share AS metagameShare,
+        mainboard_copies AS mainboardCopies,
+        sideboard_copies AS sideboardCopies,
+        archetype_families_json AS archetypeFamiliesJson,
+        sort_order AS sortOrder
+      FROM card_period_matrix
+      WHERE pipeline_run_id = ?
+      ORDER BY sort_order, archetype_families_json, card_name`
+    )
+    .all(pipelineRunId);
+
+  return rows.map((row) => ({
+    archetypeFamilies: parseJsonArray(row.archetypeFamiliesJson),
+    cardName: String(row.cardName),
+    decksWithCard: Number(row.decksWithCard),
+    mainboardCopies: Number(row.mainboardCopies),
+    metagameShare: Number(row.metagameShare),
+    periodEndDate: String(row.periodEndDate),
+    periodId: String(row.periodId),
+    periodStartDate: String(row.periodStartDate),
+    pipelineRunId: String(row.pipelineRunId),
+    setCode: String(row.setCode),
+    setName: String(row.setName),
+    sideboardCopies: Number(row.sideboardCopies),
+    sortOrder: Number(row.sortOrder),
+    totalDecksInPeriod: Number(row.totalDecksInPeriod)
+  }));
+}
+
+export function listPersistedArchetypePeriodSummaryRows(
+  database: DatabaseSync,
+  pipelineRunId: string
+): readonly ArchetypePeriodSummaryRow[] {
+  const rows = database
+    .prepare(
+      `SELECT
+        pipeline_run_id AS pipelineRunId,
+        archetype_family AS archetypeFamily,
+        period_id AS periodId,
+        set_code AS setCode,
+        set_name AS setName,
+        period_start_date AS periodStartDate,
+        period_end_date AS periodEndDate,
+        total_deck_weight AS totalDeckWeight,
+        unique_cards AS uniqueCards,
+        representative_cards_json AS representativeCardsJson,
+        period_metagame_share AS periodMetagameShare,
+        sort_order AS sortOrder
+      FROM archetype_period_summaries
+      WHERE pipeline_run_id = ?
+      ORDER BY sort_order, archetype_family`
+    )
+    .all(pipelineRunId);
+
+  return rows.map((row) => ({
+    archetypeFamily: String(row.archetypeFamily),
+    periodEndDate: String(row.periodEndDate),
+    periodId: String(row.periodId),
+    periodMetagameShare: Number(row.periodMetagameShare),
+    periodStartDate: String(row.periodStartDate),
+    pipelineRunId: String(row.pipelineRunId),
+    representativeCards: parseJsonArray(row.representativeCardsJson),
+    setCode: String(row.setCode),
+    setName: String(row.setName),
+    sortOrder: Number(row.sortOrder),
+    totalDeckWeight: Number(row.totalDeckWeight),
+    uniqueCards: Number(row.uniqueCards)
   }));
 }
 
