@@ -85,6 +85,14 @@ MTGO supports year/month filtered Modern decklist pages:
 pnpm collect:mtgo -- --years 2026 --months 05 --limit-events 1 --limit-decks 2
 ```
 
+MTGGoldfish supports explicit tournament archive inputs by slug, numeric ID, or full URL:
+
+```bash
+pnpm collect:mtggoldfish -- --events grand-prix-las-vegas-2017-modern,23447 --limit-decks 8
+```
+
+When `--events` is omitted, the collector uses a small set of known historical Modern tournament archives and can be filtered with `--years`.
+
 ## Shared Contracts
 
 The initial shared contracts live in `src/types/contracts.ts` and cover:

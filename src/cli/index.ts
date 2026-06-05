@@ -28,7 +28,7 @@ Usage:
   cube-refiner collect:all [--db path] [--raw-dir path] [--refresh]
   cube-refiner collect:mtgtop8 [--db path] [--raw-dir path] [--refresh]
   cube-refiner collect:mtgo [--db path] [--raw-dir path] [--refresh]
-  cube-refiner collect:mtggoldfish [--db path] [--raw-dir path] [--refresh]
+  cube-refiner collect:mtggoldfish [--db path] [--raw-dir path] [--refresh] [--events ids-or-urls]
 
 Project paths:
   raw data:        ${defaultProjectPaths.rawDataDir}
@@ -50,6 +50,7 @@ if (command.startsWith("collect:")) {
     collectorOptions: {
       limitDecks: getOptionValue("--limit-decks"),
       limitEvents: getOptionValue("--limit-events"),
+      events: getOptionValue("--events"),
       months: getOptionValue("--months"),
       years: getOptionValue("--years")
     },
