@@ -50,6 +50,7 @@ if (command.startsWith("collect:")) {
     collectorOptions: {
       limitDecks: getOptionValue("--limit-decks"),
       limitEvents: getOptionValue("--limit-events"),
+      months: getOptionValue("--months"),
       years: getOptionValue("--years")
     },
     databasePath,

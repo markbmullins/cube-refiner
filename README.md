@@ -79,6 +79,12 @@ MTGTop8 supports focused historical runs:
 pnpm collect:mtgtop8 -- --years 2015 --limit-events 1 --limit-decks 2
 ```
 
+MTGO supports year/month filtered Modern decklist pages:
+
+```bash
+pnpm collect:mtgo -- --years 2026 --months 05 --limit-events 1 --limit-decks 2
+```
+
 ## Shared Contracts
 
 The initial shared contracts live in `src/types/contracts.ts` and cover:
