@@ -279,6 +279,54 @@ CREATE INDEX IF NOT EXISTS idx_pipeline_stage_runs_pipeline ON pipeline_stage_ru
 CREATE INDEX IF NOT EXISTS idx_output_artifacts_pipeline ON output_artifacts(pipeline_run_id, stage);
 CREATE INDEX IF NOT EXISTS idx_output_artifacts_hash ON output_artifacts(content_hash);
 `
+  },
+  {
+    description: "Historical metagame periods and deck assignments",
+    id: "0004_metagame_periods",
+    sql: `
+CREATE TABLE IF NOT EXISTS set_releases (
+  set_code TEXT PRIMARY KEY,
+  set_name TEXT NOT NULL,
+  release_date TEXT NOT NULL,
+  set_type TEXT NOT NULL CHECK (set_type IN ('core', 'expansion')),
+  source TEXT NOT NULL,
+  metadata_json TEXT NOT NULL DEFAULT '{}'
+);
+
+CREATE TABLE IF NOT EXISTS metagame_periods (
+  period_id TEXT PRIMARY KEY,
+  model TEXT NOT NULL CHECK (model = 'standard_set_release'),
+  set_code TEXT NOT NULL REFERENCES set_releases(set_code) ON DELETE RESTRICT,
+  set_name TEXT NOT NULL,
+  release_date TEXT NOT NULL,
+  start_date TEXT NOT NULL,
+  end_date TEXT NOT NULL,
+  sort_order INTEGER NOT NULL,
+  config_hash TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS deck_metagame_periods (
+  deck_id TEXT PRIMARY KEY REFERENCES normalized_decks(deck_id) ON DELETE CASCADE,
+  period_id TEXT NOT NULL REFERENCES metagame_periods(period_id) ON DELETE CASCADE,
+  assigned_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS metagame_period_assignment_reviews (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  deck_id TEXT REFERENCES normalized_decks(deck_id) ON DELETE CASCADE,
+  event_date TEXT,
+  reason TEXT NOT NULL CHECK (reason IN ('missing_event_date', 'invalid_event_date', 'out_of_range')),
+  metadata_json TEXT NOT NULL DEFAULT '{}',
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_set_releases_release_date ON set_releases(release_date);
+CREATE INDEX IF NOT EXISTS idx_metagame_periods_dates ON metagame_periods(start_date, end_date);
+CREATE INDEX IF NOT EXISTS idx_metagame_periods_sort ON metagame_periods(model, sort_order);
+CREATE INDEX IF NOT EXISTS idx_deck_metagame_periods_period ON deck_metagame_periods(period_id);
+CREATE INDEX IF NOT EXISTS idx_metagame_period_reviews_deck ON metagame_period_assignment_reviews(deck_id);
+`
   }
 ];
 

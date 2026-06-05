@@ -72,6 +72,22 @@ pnpm dev -- db:init --db data/cube-refiner.sqlite
 
 `db:status` summarizes migrations, table counts, pending review items, latest pipeline stages, saved config profiles, artifact counts, and stale artifact paths. `db:reviews` lists unresolved cards, archetype mapping gaps, near-duplicate review clusters, parasitic-card candidates, validation warnings, and zero-support cube cards without opening CSVs by hand. Destructive reset commands require `--force`; use `db:backup` or `db:reset --backup <path>` before replacing useful local state.
 
+## Historical Metagame Periods
+
+Historical Modern uses Standard set release windows as its primary metagame periods. A release window starts on a Standard-legal core or expansion release date and ends on the day before the next Standard-legal release, clipped to the configured project start and end dates. This gives cards credit for how they lived through real metagame shifts instead of flattening everything into one aggregate frequency pool or coarse annual buckets.
+
+The bundled calendar lives at `data/standard-set-releases.json`. The default historical range is August 12, 2011 through April 30, 2019, so the first generated period starts inside the Magic 2012 window and the final default period is clipped before War of the Spark.
+
+```bash
+pnpm dev -- periods:seed
+pnpm dev -- periods:generate --start-date 2011-08-12 --end-date 2019-04-30 --model standard-set-release
+pnpm dev -- periods:list
+pnpm dev -- periods:assign
+pnpm dev -- db:reviews --queue period_assignments
+```
+
+`periods:generate` seeds the release calendar into SQLite before creating `metagame_periods`, so a clean database can be initialized with one command. `periods:assign` maps normalized decks to periods by event date and persists out-of-range or invalid dates in the `period_assignments` review queue.
+
 ## End-to-End Pipeline
 
 Run the full DB-first pipeline from collection through validation and exports:
@@ -225,3 +241,6 @@ The initial shared contracts live in `src/types/contracts.ts` and cover:
 - generated cube candidates
 - validation summaries
 - pipeline runs
+- Standard set releases
+- metagame periods
+- deck-to-period assignments and review rows

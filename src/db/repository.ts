@@ -1,7 +1,20 @@
 import { createHash, randomUUID } from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
 
-import type { CandidatePool, CardScoreRow, CubeCardRole, DeckCard, DeckSource, NormalizedDeck, RawDeck } from "../types/contracts.js";
+import type {
+  CandidatePool,
+  CardScoreRow,
+  CubeCardRole,
+  DeckCard,
+  DeckSource,
+  MetaPeriod,
+  MetagamePeriodAssignmentReview,
+  MetagamePeriodModel,
+  NormalizedDeck,
+  RawDeck,
+  SetRelease,
+  StandardSetType
+} from "../types/contracts.js";
 
 export type SourceSnapshotInput = {
   readonly source: DeckSource;
@@ -84,6 +97,31 @@ export type NormalizedDeckDedupeRecord = {
   readonly archetypeFamily: string;
   readonly fingerprint: string;
   readonly mainboard: readonly DeckCard[];
+};
+
+export type NormalizedDeckPeriodCandidateRecord = {
+  readonly deckId: string;
+  readonly eventDate?: string;
+};
+
+export type DeckMetagamePeriodAssignmentInput = {
+  readonly deckId: string;
+  readonly periodId: string;
+};
+
+export type DeckMetagamePeriodAssignmentRecord = {
+  readonly deckId: string;
+  readonly periodId: string;
+  readonly assignedAt: string;
+};
+
+export type MetagamePeriodAssignmentReviewRecord = {
+  readonly id: number;
+  readonly deckId?: string;
+  readonly eventDate?: string;
+  readonly reason: string;
+  readonly metadata: unknown;
+  readonly createdAt: string;
 };
 
 export type DedupeClusterInput = {
@@ -538,6 +576,239 @@ export function upsertNormalizedDeck(database: DatabaseSync, input: NormalizedDe
     database.exec("ROLLBACK;");
     throw error;
   }
+}
+
+export function replaceSetReleases(database: DatabaseSync, releases: readonly SetRelease[]): void {
+  database.exec("BEGIN;");
+  try {
+    const insert = database.prepare(
+      `INSERT INTO set_releases (
+        set_code, set_name, release_date, set_type, source, metadata_json
+      )
+      VALUES (?, ?, ?, ?, ?, ?)
+      ON CONFLICT(set_code) DO UPDATE SET
+        set_name = excluded.set_name,
+        release_date = excluded.release_date,
+        set_type = excluded.set_type,
+        source = excluded.source,
+        metadata_json = excluded.metadata_json`
+    );
+
+    for (const release of releases) {
+      insert.run(
+        release.setCode,
+        release.setName,
+        release.releaseDate,
+        release.setType,
+        release.source,
+        JSON.stringify(release.metadata ?? {})
+      );
+    }
+
+    database.exec("COMMIT;");
+  } catch (error) {
+    database.exec("ROLLBACK;");
+    throw error;
+  }
+}
+
+export function listSetReleases(database: DatabaseSync): readonly SetRelease[] {
+  const rows = database
+    .prepare(
+      `SELECT
+        set_code AS setCode,
+        set_name AS setName,
+        release_date AS releaseDate,
+        set_type AS setType,
+        source,
+        metadata_json AS metadataJson
+      FROM set_releases
+      ORDER BY release_date, set_code`
+    )
+    .all();
+
+  return rows.map((row) => ({
+    metadata: parseJson(String(row.metadataJson), {}),
+    releaseDate: String(row.releaseDate),
+    setCode: String(row.setCode),
+    setName: String(row.setName),
+    setType: String(row.setType) as StandardSetType,
+    source: String(row.source)
+  }));
+}
+
+export function replaceMetagamePeriods(
+  database: DatabaseSync,
+  periods: readonly MetaPeriod[],
+  configHash: string
+): void {
+  database.exec("BEGIN;");
+  try {
+    database.prepare("DELETE FROM metagame_period_assignment_reviews").run();
+    database.prepare("DELETE FROM deck_metagame_periods").run();
+    database.prepare("DELETE FROM metagame_periods").run();
+    const insert = database.prepare(
+      `INSERT INTO metagame_periods (
+        period_id, model, set_code, set_name, release_date, start_date, end_date,
+        sort_order, config_hash
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    );
+
+    for (const period of periods) {
+      insert.run(
+        period.periodId,
+        period.model,
+        period.setCode,
+        period.setName,
+        period.releaseDate,
+        period.startDate,
+        period.endDate,
+        period.sortOrder,
+        configHash
+      );
+    }
+
+    database.exec("COMMIT;");
+  } catch (error) {
+    database.exec("ROLLBACK;");
+    throw error;
+  }
+}
+
+export function listMetagamePeriods(
+  database: DatabaseSync,
+  model: MetagamePeriodModel = "standard_set_release"
+): readonly MetaPeriod[] {
+  const rows = database
+    .prepare(
+      `SELECT
+        period_id AS periodId,
+        model,
+        set_code AS setCode,
+        set_name AS setName,
+        release_date AS releaseDate,
+        start_date AS startDate,
+        end_date AS endDate,
+        sort_order AS sortOrder
+      FROM metagame_periods
+      WHERE model = ?
+      ORDER BY sort_order, start_date, period_id`
+    )
+    .all(model);
+
+  return rows.map((row) => ({
+    endDate: String(row.endDate),
+    model: String(row.model) as MetagamePeriodModel,
+    periodId: String(row.periodId),
+    releaseDate: String(row.releaseDate),
+    setCode: String(row.setCode),
+    setName: String(row.setName),
+    sortOrder: Number(row.sortOrder),
+    startDate: String(row.startDate)
+  }));
+}
+
+export function listNormalizedDeckPeriodCandidates(
+  database: DatabaseSync
+): readonly NormalizedDeckPeriodCandidateRecord[] {
+  const rows = database
+    .prepare(
+      `SELECT deck_id AS deckId, event_date AS eventDate
+       FROM normalized_decks
+       ORDER BY event_date, deck_id`
+    )
+    .all();
+
+  return rows.map((row) => ({
+    deckId: String(row.deckId),
+    eventDate: row.eventDate === null || row.eventDate === undefined ? undefined : String(row.eventDate)
+  }));
+}
+
+export function replaceDeckMetagamePeriodAssignments(
+  database: DatabaseSync,
+  assignments: readonly DeckMetagamePeriodAssignmentInput[],
+  reviews: readonly MetagamePeriodAssignmentReview[]
+): void {
+  database.exec("BEGIN;");
+  try {
+    database.prepare("DELETE FROM deck_metagame_periods").run();
+    database.prepare("DELETE FROM metagame_period_assignment_reviews").run();
+
+    const insertAssignment = database.prepare(
+      `INSERT INTO deck_metagame_periods (deck_id, period_id)
+       VALUES (?, ?)`
+    );
+    for (const assignment of assignments) {
+      insertAssignment.run(assignment.deckId, assignment.periodId);
+    }
+
+    const insertReview = database.prepare(
+      `INSERT INTO metagame_period_assignment_reviews (
+        deck_id, event_date, reason, metadata_json
+      )
+      VALUES (?, ?, ?, ?)`
+    );
+    for (const review of reviews) {
+      insertReview.run(
+        review.deckId ?? null,
+        review.eventDate ?? null,
+        review.reason,
+        JSON.stringify(review.metadata ?? {})
+      );
+    }
+
+    database.exec("COMMIT;");
+  } catch (error) {
+    database.exec("ROLLBACK;");
+    throw error;
+  }
+}
+
+export function listDeckMetagamePeriodAssignments(
+  database: DatabaseSync
+): readonly DeckMetagamePeriodAssignmentRecord[] {
+  const rows = database
+    .prepare(
+      `SELECT deck_id AS deckId, period_id AS periodId, assigned_at AS assignedAt
+       FROM deck_metagame_periods
+       ORDER BY deck_id`
+    )
+    .all();
+
+  return rows.map((row) => ({
+    assignedAt: String(row.assignedAt),
+    deckId: String(row.deckId),
+    periodId: String(row.periodId)
+  }));
+}
+
+export function listMetagamePeriodAssignmentReviews(
+  database: DatabaseSync
+): readonly MetagamePeriodAssignmentReviewRecord[] {
+  const rows = database
+    .prepare(
+      `SELECT
+        id,
+        deck_id AS deckId,
+        event_date AS eventDate,
+        reason,
+        metadata_json AS metadataJson,
+        created_at AS createdAt
+      FROM metagame_period_assignment_reviews
+      ORDER BY id`
+    )
+    .all();
+
+  return rows.map((row) => ({
+    createdAt: String(row.createdAt),
+    deckId: row.deckId === null || row.deckId === undefined ? undefined : String(row.deckId),
+    eventDate: row.eventDate === null || row.eventDate === undefined ? undefined : String(row.eventDate),
+    id: Number(row.id),
+    metadata: parseJson(String(row.metadataJson), {}),
+    reason: String(row.reason)
+  }));
 }
 
 export function listRawDeckRecords(database: DatabaseSync): readonly RawDeckRecord[] {
@@ -1255,6 +1526,18 @@ function parseJsonObject(value: unknown): Record<string, unknown> {
     return parsed !== null && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : {};
   } catch {
     return {};
+  }
+}
+
+function parseJson(value: unknown, fallback: unknown): unknown {
+  if (typeof value !== "string") {
+    return fallback;
+  }
+
+  try {
+    return JSON.parse(value) as unknown;
+  } catch {
+    return fallback;
   }
 }
 

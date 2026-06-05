@@ -1,0 +1,240 @@
+[
+  {
+    "setCode": "mbs",
+    "setName": "Mirrodin Besieged",
+    "releaseDate": "2011-02-04",
+    "setType": "expansion",
+    "source": "scryfall"
+  },
+  {
+    "setCode": "nph",
+    "setName": "New Phyrexia",
+    "releaseDate": "2011-05-13",
+    "setType": "expansion",
+    "source": "scryfall"
+  },
+  {
+    "setCode": "m12",
+    "setName": "Magic 2012",
+    "releaseDate": "2011-07-15",
+    "setType": "core",
+    "source": "scryfall"
+  },
+  {
+    "setCode": "isd",
+    "setName": "Innistrad",
+    "releaseDate": "2011-09-30",
+    "setType": "expansion",
+    "source": "scryfall"
+  },
+  {
+    "setCode": "dka",
+    "setName": "Dark Ascension",
+    "releaseDate": "2012-02-03",
+    "setType": "expansion",
+    "source": "scryfall"
+  },
+  {
+    "setCode": "avr",
+    "setName": "Avacyn Restored",
+    "releaseDate": "2012-05-04",
+    "setType": "expansion",
+    "source": "scryfall"
+  },
+  {
+    "setCode": "m13",
+    "setName": "Magic 2013",
+    "releaseDate": "2012-07-13",
+    "setType": "core",
+    "source": "scryfall"
+  },
+  {
+    "setCode": "rtr",
+    "setName": "Return to Ravnica",
+    "releaseDate": "2012-10-05",
+    "setType": "expansion",
+    "source": "scryfall"
+  },
+  {
+    "setCode": "gtc",
+    "setName": "Gatecrash",
+    "releaseDate": "2013-02-01",
+    "setType": "expansion",
+    "source": "scryfall"
+  },
+  {
+    "setCode": "dgm",
+    "setName": "Dragon's Maze",
+    "releaseDate": "2013-05-03",
+    "setType": "expansion",
+    "source": "scryfall"
+  },
+  {
+    "setCode": "m14",
+    "setName": "Magic 2014",
+    "releaseDate": "2013-07-19",
+    "setType": "core",
+    "source": "scryfall"
+  },
+  {
+    "setCode": "ths",
+    "setName": "Theros",
+    "releaseDate": "2013-09-27",
+    "setType": "expansion",
+    "source": "scryfall"
+  },
+  {
+    "setCode": "bng",
+    "setName": "Born of the Gods",
+    "releaseDate": "2014-02-07",
+    "setType": "expansion",
+    "source": "scryfall"
+  },
+  {
+    "setCode": "jou",
+    "setName": "Journey into Nyx",
+    "releaseDate": "2014-05-02",
+    "setType": "expansion",
+    "source": "scryfall"
+  },
+  {
+    "setCode": "m15",
+    "setName": "Magic 2015",
+    "releaseDate": "2014-07-18",
+    "setType": "core",
+    "source": "scryfall"
+  },
+  {
+    "setCode": "ktk",
+    "setName": "Khans of Tarkir",
+    "releaseDate": "2014-09-26",
+    "setType": "expansion",
+    "source": "scryfall"
+  },
+  {
+    "setCode": "frf",
+    "setName": "Fate Reforged",
+    "releaseDate": "2015-01-23",
+    "setType": "expansion",
+    "source": "scryfall"
+  },
+  {
+    "setCode": "dtk",
+    "setName": "Dragons of Tarkir",
+    "releaseDate": "2015-03-27",
+    "setType": "expansion",
+    "source": "scryfall"
+  },
+  {
+    "setCode": "ori",
+    "setName": "Magic Origins",
+    "releaseDate": "2015-07-17",
+    "setType": "core",
+    "source": "scryfall"
+  },
+  {
+    "setCode": "bfz",
+    "setName": "Battle for Zendikar",
+    "releaseDate": "2015-10-02",
+    "setType": "expansion",
+    "source": "scryfall"
+  },
+  {
+    "setCode": "ogw",
+    "setName": "Oath of the Gatewatch",
+    "releaseDate": "2016-01-22",
+    "setType": "expansion",
+    "source": "scryfall"
+  },
+  {
+    "setCode": "soi",
+    "setName": "Shadows over Innistrad",
+    "releaseDate": "2016-04-08",
+    "setType": "expansion",
+    "source": "scryfall"
+  },
+  {
+    "setCode": "emn",
+    "setName": "Eldritch Moon",
+    "releaseDate": "2016-07-22",
+    "setType": "expansion",
+    "source": "scryfall"
+  },
+  {
+    "setCode": "kld",
+    "setName": "Kaladesh",
+    "releaseDate": "2016-09-30",
+    "setType": "expansion",
+    "source": "scryfall"
+  },
+  {
+    "setCode": "aer",
+    "setName": "Aether Revolt",
+    "releaseDate": "2017-01-20",
+    "setType": "expansion",
+    "source": "scryfall"
+  },
+  {
+    "setCode": "akh",
+    "setName": "Amonkhet",
+    "releaseDate": "2017-04-28",
+    "setType": "expansion",
+    "source": "scryfall"
+  },
+  {
+    "setCode": "hou",
+    "setName": "Hour of Devastation",
+    "releaseDate": "2017-07-14",
+    "setType": "expansion",
+    "source": "scryfall"
+  },
+  {
+    "setCode": "xln",
+    "setName": "Ixalan",
+    "releaseDate": "2017-09-29",
+    "setType": "expansion",
+    "source": "scryfall"
+  },
+  {
+    "setCode": "rix",
+    "setName": "Rivals of Ixalan",
+    "releaseDate": "2018-01-19",
+    "setType": "expansion",
+    "source": "scryfall"
+  },
+  {
+    "setCode": "dom",
+    "setName": "Dominaria",
+    "releaseDate": "2018-04-27",
+    "setType": "expansion",
+    "source": "scryfall"
+  },
+  {
+    "setCode": "m19",
+    "setName": "Core Set 2019",
+    "releaseDate": "2018-07-13",
+    "setType": "core",
+    "source": "scryfall"
+  },
+  {
+    "setCode": "grn",
+    "setName": "Guilds of Ravnica",
+    "releaseDate": "2018-10-05",
+    "setType": "expansion",
+    "source": "scryfall"
+  },
+  {
+    "setCode": "rna",
+    "setName": "Ravnica Allegiance",
+    "releaseDate": "2019-01-25",
+    "setType": "expansion",
+    "source": "scryfall"
+  },
+  {
+    "setCode": "war",
+    "setName": "War of the Spark",
+    "releaseDate": "2019-05-03",
+    "setType": "expansion",
+    "source": "scryfall"
+  }
+]

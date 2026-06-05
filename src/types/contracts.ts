@@ -108,3 +108,41 @@ export type PipelineRun = {
   readonly configHash: string;
   readonly status: "running" | "completed" | "failed";
 };
+
+export type MetagamePeriodModel = "standard_set_release";
+
+export type StandardSetType = "core" | "expansion";
+
+export type SetRelease = {
+  readonly setCode: string;
+  readonly setName: string;
+  readonly releaseDate: string;
+  readonly setType: StandardSetType;
+  readonly source: string;
+  readonly metadata?: unknown;
+};
+
+export type MetaPeriod = {
+  readonly periodId: string;
+  readonly model: MetagamePeriodModel;
+  readonly setCode: string;
+  readonly setName: string;
+  readonly releaseDate: string;
+  readonly startDate: string;
+  readonly endDate: string;
+  readonly sortOrder: number;
+};
+
+export type DeckMetagamePeriodAssignment = {
+  readonly deckId: string;
+  readonly periodId: string;
+};
+
+export type MetagamePeriodAssignmentReviewReason = "missing_event_date" | "invalid_event_date" | "out_of_range";
+
+export type MetagamePeriodAssignmentReview = {
+  readonly deckId?: string;
+  readonly eventDate?: string;
+  readonly reason: MetagamePeriodAssignmentReviewReason;
+  readonly metadata?: unknown;
+};

@@ -10,6 +10,7 @@ import {
   applyMigrations,
   getDatabaseStatus,
   listConfigProfiles,
+  listMetagamePeriods,
   listManualReviewItems,
   listOutputArtifacts,
   openDatabase,
@@ -23,6 +24,15 @@ import {
   normalizeCards
 } from "../normalize/index.js";
 import { runFullPipeline } from "../pipeline.js";
+import {
+  assignDecksToMetagamePeriods,
+  defaultHistoricalEndDate,
+  defaultHistoricalStartDate,
+  defaultSetReleaseCalendarPath,
+  generateAndPersistMetagamePeriods,
+  parseMetagamePeriodModel,
+  seedSetReleases
+} from "../periods.js";
 import { buildCardArchetypeMatrix, scoreCards } from "../scoring/index.js";
 import type { DeckSource } from "../types/contracts.js";
 
@@ -59,6 +69,10 @@ Usage:
   cube-refiner normalize:cards [--db path] [--scryfall-file path] [--fetch-scryfall] [--audit-csv path] [--fail-on-unknown]
   cube-refiner normalize:archetypes [--db path] [--mapping-file path] [--audit-csv path] [--fail-on-unmapped]
   cube-refiner dedupe:decks [--db path] [--report-csv path] [--near-overlap count]
+  cube-refiner periods:seed [--db path] [--set-releases-file path]
+  cube-refiner periods:generate [--db path] [--set-releases-file path] [--start-date YYYY-MM-DD] [--end-date YYYY-MM-DD] [--model standard-set-release]
+  cube-refiner periods:list [--db path] [--json]
+  cube-refiner periods:assign [--db path]
   cube-refiner matrix:build [--db path] [--matrix-csv path] [--archetypes-csv path] [--pipeline-run-id id]
   cube-refiner score:cards [--db path] --pipeline-run-id id [--glue-threshold n] [--signpost-affinity n] [--signpost-exclusivity n] [--signpost-min-decks n]
   cube-refiner candidates:generate [--db path] --pipeline-run-id id [--output-dir path]
@@ -203,6 +217,71 @@ if (command === "dedupe:decks") {
     if (summary.reportCsvPath) {
       console.log(`Dedupe report CSV: ${summary.reportCsvPath}`);
     }
+  } finally {
+    database.close();
+  }
+  process.exit(0);
+}
+
+if (command === "periods:seed") {
+  const database = openDatabase({ path: databasePath });
+  try {
+    applyMigrations(database);
+    const setReleasesFile = getOptionValue("--set-releases-file") ?? defaultSetReleaseCalendarPath;
+    const seeded = seedSetReleases(database, { setReleasesFile });
+    console.log(`Seeded ${seeded} Standard set releases from ${setReleasesFile}.`);
+  } finally {
+    database.close();
+  }
+  process.exit(0);
+}
+
+if (command === "periods:generate") {
+  const database = openDatabase({ path: databasePath });
+  try {
+    applyMigrations(database);
+    const setReleasesFile = getOptionValue("--set-releases-file") ?? defaultSetReleaseCalendarPath;
+    const seeded = seedSetReleases(database, { setReleasesFile });
+    const summary = generateAndPersistMetagamePeriods(database, {
+      endDate: getOptionValue("--end-date") ?? defaultHistoricalEndDate,
+      model: parseMetagamePeriodModel(getOptionValue("--model")),
+      startDate: getOptionValue("--start-date") ?? defaultHistoricalStartDate
+    });
+    console.log(`Seeded ${seeded} Standard set releases from ${setReleasesFile}.`);
+    console.log(
+      `Generated ${summary.periods} ${summary.model} periods from ${summary.startDate} through ${summary.endDate}.`
+    );
+    console.log(`Config hash: ${summary.configHash}`);
+  } finally {
+    database.close();
+  }
+  process.exit(0);
+}
+
+if (command === "periods:list") {
+  const database = openDatabase({ path: databasePath });
+  try {
+    applyMigrations(database);
+    const periods = listMetagamePeriods(database);
+    if (args.includes("--json")) {
+      console.log(JSON.stringify(periods, null, 2));
+    } else {
+      for (const period of periods) {
+        console.log(`${period.sortOrder}: ${period.periodId} ${period.startDate}..${period.endDate} (${period.setName})`);
+      }
+    }
+  } finally {
+    database.close();
+  }
+  process.exit(0);
+}
+
+if (command === "periods:assign") {
+  const database = openDatabase({ path: databasePath });
+  try {
+    applyMigrations(database);
+    const summary = assignDecksToMetagamePeriods(database);
+    console.log(`Assigned ${summary.assignedDecks} decks to metagame periods; review rows ${summary.reviewRows}.`);
   } finally {
     database.close();
   }
@@ -573,6 +652,7 @@ function parseReviewQueue(value: string | undefined): Parameters<typeof listManu
     value === "unresolved_cards" ||
     value === "archetype_gaps" ||
     value === "dedupe_ambiguities" ||
+    value === "period_assignments" ||
     value === "parasitic_cards" ||
     value === "validation_warnings" ||
     value === "zero_support_cards"

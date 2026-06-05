@@ -27,6 +27,7 @@ export type ManualReviewQueue =
   | "unresolved_cards"
   | "archetype_gaps"
   | "dedupe_ambiguities"
+  | "period_assignments"
   | "parasitic_cards"
   | "validation_warnings"
   | "zero_support_cards";
@@ -75,6 +76,10 @@ export function getDatabaseStatus(database: DatabaseSync): DatabaseStatusSummary
       "candidate_pool_cards",
       "cube_runs",
       "validation_runs",
+      "set_releases",
+      "metagame_periods",
+      "deck_metagame_periods",
+      "metagame_period_assignment_reviews",
       "output_artifacts"
     ].map((table) => [table, tableCount(database, table)])
   );
@@ -107,6 +112,7 @@ export function listManualReviewItems(
         "unresolved_cards",
         "archetype_gaps",
         "dedupe_ambiguities",
+        "period_assignments",
         "parasitic_cards",
         "validation_warnings",
         "zero_support_cards"
@@ -270,6 +276,27 @@ function listQueue(database: DatabaseSync, queue: ManualReviewQueue): readonly M
         reviewItem(queue, String(row.item), String(row.explanation), {
           pipelineRunId: row.pipelineRunId,
           score: row.score
+        })
+      );
+  }
+
+  if (queue === "period_assignments") {
+    return database
+      .prepare(
+        `SELECT
+          id,
+          deck_id AS deckId,
+          event_date AS eventDate,
+          reason,
+          metadata_json AS metadataJson
+         FROM metagame_period_assignment_reviews
+         ORDER BY id`
+      )
+      .all()
+      .map((row) =>
+        reviewItem(queue, String(row.deckId ?? `review-${String(row.id)}`), `Period assignment ${String(row.reason)}`, {
+          ...parseJsonObject(row.metadataJson),
+          eventDate: row.eventDate
         })
       );
   }
