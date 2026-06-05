@@ -62,6 +62,17 @@ pnpm dev -- db:reset
 pnpm dev -- db:init --db data/cube-refiner.sqlite
 ```
 
+## Collector Commands
+
+```bash
+pnpm collect:all
+pnpm collect:mtgtop8
+pnpm collect:mtgo
+pnpm collect:mtggoldfish
+```
+
+Collector runs write source snapshots under `data/raw/{source}/`, upsert raw deck metadata and cards into SQLite, and emit parsed deck JSON snapshots for auditability.
+
 ## Shared Contracts
 
 The initial shared contracts live in `src/types/contracts.ts` and cover:

@@ -2,8 +2,10 @@
 
 import { existsSync, rmSync } from "node:fs";
 
+import { runCollectors } from "../collectors/index.js";
 import { defaultProjectPaths } from "../config/paths.js";
 import { applyMigrations, openDatabase } from "../db/index.js";
+import type { DeckSource } from "../types/contracts.js";
 
 const args = process.argv.slice(2);
 if (args[0] === "--") {
@@ -12,6 +14,8 @@ if (args[0] === "--") {
 
 const [command = "help"] = args;
 const databasePath = getOptionValue("--db") ?? defaultProjectPaths.sqliteDatabasePath;
+const rawDataDir = getOptionValue("--raw-dir") ?? defaultProjectPaths.rawDataDir;
+const refresh = args.includes("--refresh");
 
 if (command === "help" || command === "--help" || command === "-h") {
   console.log(`cube-refiner
@@ -21,6 +25,10 @@ Usage:
   cube-refiner db:init [--db path]
   cube-refiner db:migrate [--db path]
   cube-refiner db:reset [--db path]
+  cube-refiner collect:all [--db path] [--raw-dir path] [--refresh]
+  cube-refiner collect:mtgtop8 [--db path] [--raw-dir path] [--refresh]
+  cube-refiner collect:mtgo [--db path] [--raw-dir path] [--refresh]
+  cube-refiner collect:mtggoldfish [--db path] [--raw-dir path] [--refresh]
 
 Project paths:
   raw data:        ${defaultProjectPaths.rawDataDir}
@@ -28,6 +36,29 @@ Project paths:
   outputs:         ${defaultProjectPaths.outputsDir}
   sqlite db:       ${defaultProjectPaths.sqliteDatabasePath}
 `);
+  process.exit(0);
+}
+
+if (command.startsWith("collect:")) {
+  const sources = collectorSourcesForCommand(command);
+  if (!sources) {
+    console.error(`Unknown collector command: ${command}`);
+    process.exit(1);
+  }
+
+  const summaries = await runCollectors({
+    databasePath,
+    rawDataDir,
+    refresh,
+    sources
+  });
+
+  for (const summary of summaries) {
+    console.log(
+      `${summary.source}: ${summary.deckCount} decklists persisted; parsed snapshot: ${summary.parsedOutputPath}`
+    );
+  }
+
   process.exit(0);
 }
 
@@ -80,4 +111,24 @@ function getOptionValue(name: string): string | undefined {
   }
 
   return args[index + 1];
+}
+
+function collectorSourcesForCommand(value: string): readonly DeckSource[] | undefined {
+  if (value === "collect:all") {
+    return ["mtgtop8", "mtgo", "mtggoldfish"];
+  }
+
+  if (value === "collect:mtgtop8") {
+    return ["mtgtop8"];
+  }
+
+  if (value === "collect:mtgo") {
+    return ["mtgo"];
+  }
+
+  if (value === "collect:mtggoldfish") {
+    return ["mtggoldfish"];
+  }
+
+  return undefined;
 }
