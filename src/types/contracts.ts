@@ -218,3 +218,20 @@ export type ArchetypePeriodSummaryRow = {
   readonly periodMetagameShare: number;
   readonly sortOrder: number;
 };
+
+export type HistoricalCardRole = "format_pillar" | "archetype_icon" | "flash_in_the_pan" | "role_player";
+
+export type HistoricalCardScoreRow = {
+  readonly pipelineRunId: string;
+  readonly cardName: string;
+  readonly eraScore: number;
+  readonly peakScore: number;
+  readonly longevityScore: number;
+  readonly periodVariance: number;
+  readonly archetypeImportanceScore: number;
+  readonly glueScore: number;
+  readonly modernLegacyScore: number;
+  readonly historicalRole: HistoricalCardRole;
+  readonly explanation: string;
+  readonly config: unknown;
+};

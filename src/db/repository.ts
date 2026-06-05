@@ -11,6 +11,8 @@ import type {
   DeckSource,
   HistoricalCoverageWarning,
   HistoricalCoverageWarningType,
+  HistoricalCardRole,
+  HistoricalCardScoreRow,
   HistoricalSourceCoverageRow,
   HistoricalSourceCoverageStatus,
   MetaPeriod,
@@ -155,6 +157,15 @@ export type PeriodMatrixInputRow = {
   readonly zone: "mainboard" | "sideboard";
   readonly cardName: string;
   readonly copies: number;
+};
+
+export type HistoricalScoreInputRow = {
+  readonly cardName: string;
+  readonly periodId: string;
+  readonly metagameShare: number;
+  readonly mainboardCopies: number;
+  readonly sideboardCopies: number;
+  readonly archetypeFamilies: readonly string[];
 };
 
 export type DedupeClusterInput = {
@@ -1424,6 +1435,115 @@ export function listPersistedArchetypePeriodSummaryRows(
     sortOrder: Number(row.sortOrder),
     totalDeckWeight: Number(row.totalDeckWeight),
     uniqueCards: Number(row.uniqueCards)
+  }));
+}
+
+export function listHistoricalScoreInputRows(
+  database: DatabaseSync,
+  pipelineRunId: string
+): readonly HistoricalScoreInputRow[] {
+  const rows = database
+    .prepare(
+      `SELECT
+        card_name AS cardName,
+        period_id AS periodId,
+        metagame_share AS metagameShare,
+        mainboard_copies AS mainboardCopies,
+        sideboard_copies AS sideboardCopies,
+        archetype_families_json AS archetypeFamiliesJson
+       FROM card_period_matrix
+       WHERE pipeline_run_id = ?
+       ORDER BY sort_order, card_name`
+    )
+    .all(pipelineRunId);
+
+  return rows.map((row) => ({
+    archetypeFamilies: parseJsonArray(row.archetypeFamiliesJson),
+    cardName: String(row.cardName),
+    mainboardCopies: Number(row.mainboardCopies),
+    metagameShare: Number(row.metagameShare),
+    periodId: String(row.periodId),
+    sideboardCopies: Number(row.sideboardCopies)
+  }));
+}
+
+export function replaceHistoricalCardScoreRows(
+  database: DatabaseSync,
+  pipelineRunId: string,
+  rows: readonly HistoricalCardScoreRow[]
+): void {
+  database.exec("BEGIN;");
+  try {
+    database.prepare("DELETE FROM historical_card_scores WHERE pipeline_run_id = ?").run(pipelineRunId);
+    const insert = database.prepare(
+      `INSERT INTO historical_card_scores (
+        pipeline_run_id, card_name, era_score, peak_score, longevity_score,
+        period_variance, archetype_importance_score, glue_score,
+        modern_legacy_score, historical_role, explanation, config_json
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    );
+
+    for (const row of rows) {
+      insert.run(
+        row.pipelineRunId,
+        row.cardName,
+        row.eraScore,
+        row.peakScore,
+        row.longevityScore,
+        row.periodVariance,
+        row.archetypeImportanceScore,
+        row.glueScore,
+        row.modernLegacyScore,
+        row.historicalRole,
+        row.explanation,
+        JSON.stringify(row.config)
+      );
+    }
+
+    database.exec("COMMIT;");
+  } catch (error) {
+    database.exec("ROLLBACK;");
+    throw error;
+  }
+}
+
+export function listHistoricalCardScoreRows(
+  database: DatabaseSync,
+  pipelineRunId: string,
+  role?: HistoricalCardRole
+): readonly HistoricalCardScoreRow[] {
+  const rows = role
+    ? database
+        .prepare(
+          `SELECT *
+           FROM historical_card_scores
+           WHERE pipeline_run_id = ? AND historical_role = ?
+           ORDER BY modern_legacy_score DESC, card_name`
+        )
+        .all(pipelineRunId, role)
+    : database
+        .prepare(
+          `SELECT *
+           FROM historical_card_scores
+           WHERE pipeline_run_id = ?
+           ORDER BY modern_legacy_score DESC, card_name`
+        )
+        .all(pipelineRunId);
+
+  return rows.map((row) => ({
+    archetypeImportanceScore: Number(row.archetype_importance_score),
+    cardName: String(row.card_name),
+    config: parseJson(String(row.config_json), {}),
+    eraScore: Number(row.era_score),
+    explanation: String(row.explanation),
+    glueScore: Number(row.glue_score),
+    historicalRole: String(row.historical_role) as HistoricalCardRole,
+    longevityScore: Number(row.longevity_score),
+    modernLegacyScore: Number(row.modern_legacy_score),
+    peakScore: Number(row.peak_score),
+    periodVariance: Number(row.period_variance),
+    pipelineRunId: String(row.pipeline_run_id)
   }));
 }
 

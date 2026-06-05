@@ -121,6 +121,10 @@ Major outputs are written to `data/outputs/` by default:
 - `card_period_matrix.csv`
 - `archetype_period_coverage.csv`
 - `signpost_candidates.csv`
+- `historical_cards_ranked.csv`
+- `format_pillars.csv`
+- `archetype_icons.csv`
+- `flash_in_pan_review.csv`
 - `glue_cards.csv`
 - `parasitic_review.csv`
 - `cube_360_candidate.csv`
@@ -217,6 +221,15 @@ pnpm score:cards -- --pipeline-run-id <run-id> --glue-threshold 0.10 --signpost-
 ```
 
 Scoring writes `cards_ranked.csv`, `signpost_candidates.csv`, `glue_cards.csv`, and `parasitic_review.csv` from persisted `card_scores` rows.
+
+Score historical Modern legacy from a persisted period matrix run:
+
+```bash
+pnpm dev -- score:historical --pipeline-run-id <period-matrix-run-id>
+pnpm dev -- score:historical --pipeline-run-id <period-matrix-run-id> --era-share 0.05 --pillar-longevity 0.5 --icon-peak 0.18 --weight-longevity 0.35 --weight-peak 0.30
+```
+
+Historical scoring writes `historical_cards_ranked.csv`, `format_pillars.csv`, `archetype_icons.csv`, and `flash_in_pan_review.csv` from persisted `card_period_matrix` rows. The score blends aggregate glue when available with longevity, peak metagame share, and archetype importance rather than replacing the current card scores.
 
 Generate explainable candidate pools for cube construction:
 

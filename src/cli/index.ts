@@ -39,7 +39,7 @@ import {
   parseMetagamePeriodModel,
   seedSetReleases
 } from "../periods.js";
-import { buildCardArchetypeMatrix, buildPeriodMatrices, scoreCards } from "../scoring/index.js";
+import { buildCardArchetypeMatrix, buildPeriodMatrices, scoreCards, scoreHistoricalCards } from "../scoring/index.js";
 import type { DeckSource } from "../types/contracts.js";
 
 const args = process.argv.slice(2);
@@ -83,6 +83,7 @@ Usage:
   cube-refiner matrix:build [--db path] [--matrix-csv path] [--archetypes-csv path] [--pipeline-run-id id]
   cube-refiner matrix:periods [--db path] [--card-period-csv path] [--archetype-period-csv path] [--pipeline-run-id id]
   cube-refiner score:cards [--db path] --pipeline-run-id id [--glue-threshold n] [--signpost-affinity n] [--signpost-exclusivity n] [--signpost-min-decks n]
+  cube-refiner score:historical [--db path] --pipeline-run-id id [--aggregate-pipeline-run-id id] [--era-share n] [--pillar-longevity n] [--pillar-peak n] [--icon-peak n] [--flash-peak n] [--flash-max-longevity n] [--weight-glue n] [--weight-longevity n] [--weight-peak n] [--weight-archetype n]
   cube-refiner candidates:generate [--db path] --pipeline-run-id id [--output-dir path]
   cube-refiner cube:generate [--db path] --pipeline-run-id id [--cube-run-id id] [--output-csv path]
   cube-refiner cube:validate [--db path] --cube-run-id id [--validation-run-id id] [--output-csv path]
@@ -395,6 +396,49 @@ if (command === "score:cards") {
     console.log(`Signpost candidates CSV: ${summary.signpostCandidatesCsvPath}`);
     console.log(`Glue cards CSV: ${summary.glueCardsCsvPath}`);
     console.log(`Parasitic review CSV: ${summary.parasiticReviewCsvPath}`);
+  } finally {
+    database.close();
+  }
+  process.exit(0);
+}
+
+if (command === "score:historical") {
+  const pipelineRunId = getOptionValue("--pipeline-run-id");
+  if (!pipelineRunId) {
+    console.error("score:historical requires --pipeline-run-id.");
+    process.exit(1);
+  }
+
+  const database = openDatabase({ path: databasePath });
+  try {
+    applyMigrations(database);
+    const summary = scoreHistoricalCards(database, {
+      aggregatePipelineRunId: getOptionValue("--aggregate-pipeline-run-id"),
+      archetypeIconsCsvPath: getOptionValue("--archetype-icons-csv") ?? `${defaultProjectPaths.outputsDir}/archetype_icons.csv`,
+      flashInPanReviewCsvPath: getOptionValue("--flash-review-csv") ?? `${defaultProjectPaths.outputsDir}/flash_in_pan_review.csv`,
+      formatPillarsCsvPath: getOptionValue("--format-pillars-csv") ?? `${defaultProjectPaths.outputsDir}/format_pillars.csv`,
+      historicalCardsRankedCsvPath: getOptionValue("--historical-cards-ranked-csv") ?? `${defaultProjectPaths.outputsDir}/historical_cards_ranked.csv`,
+      pipelineRunId,
+      thresholds: {
+        eraShare: parseNumberOption(getOptionValue("--era-share")) ?? 0.05,
+        flashMaxLongevity: parseNumberOption(getOptionValue("--flash-max-longevity")) ?? 0.25,
+        flashPeak: parseNumberOption(getOptionValue("--flash-peak")) ?? 0.25,
+        iconPeak: parseNumberOption(getOptionValue("--icon-peak")) ?? 0.18,
+        pillarLongevity: parseNumberOption(getOptionValue("--pillar-longevity")) ?? 0.5,
+        pillarPeak: parseNumberOption(getOptionValue("--pillar-peak")) ?? 0.08
+      },
+      weights: {
+        archetypeImportance: parseNumberOption(getOptionValue("--weight-archetype")) ?? 0.15,
+        glue: parseNumberOption(getOptionValue("--weight-glue")) ?? 0.2,
+        longevity: parseNumberOption(getOptionValue("--weight-longevity")) ?? 0.35,
+        peak: parseNumberOption(getOptionValue("--weight-peak")) ?? 0.3
+      }
+    });
+    console.log(`Scored ${summary.scoreRows} historical cards for run ${summary.pipelineRunId}.`);
+    console.log(`Historical cards ranked CSV: ${summary.historicalCardsRankedCsvPath}`);
+    console.log(`Format pillars CSV: ${summary.formatPillarsCsvPath}`);
+    console.log(`Archetype icons CSV: ${summary.archetypeIconsCsvPath}`);
+    console.log(`Flash review CSV: ${summary.flashInPanReviewCsvPath}`);
   } finally {
     database.close();
   }

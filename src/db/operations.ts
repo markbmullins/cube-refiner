@@ -85,6 +85,7 @@ export function getDatabaseStatus(database: DatabaseSync): DatabaseStatusSummary
       "historical_coverage_warnings",
       "card_period_matrix",
       "archetype_period_summaries",
+      "historical_card_scores",
       "output_artifacts"
     ].map((table) => [table, tableCount(database, table)])
   );

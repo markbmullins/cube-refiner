@@ -408,6 +408,30 @@ CREATE TABLE IF NOT EXISTS archetype_period_summaries (
 CREATE INDEX IF NOT EXISTS idx_card_period_matrix_period ON card_period_matrix(pipeline_run_id, sort_order, card_name);
 CREATE INDEX IF NOT EXISTS idx_archetype_period_summaries_period ON archetype_period_summaries(pipeline_run_id, sort_order, archetype_family);
 `
+  },
+  {
+    description: "Historical Modern legacy card scores",
+    id: "0007_historical_card_scores",
+    sql: `
+CREATE TABLE IF NOT EXISTS historical_card_scores (
+  pipeline_run_id TEXT NOT NULL REFERENCES pipeline_runs(id) ON DELETE CASCADE,
+  card_name TEXT NOT NULL,
+  era_score REAL NOT NULL,
+  peak_score REAL NOT NULL,
+  longevity_score REAL NOT NULL,
+  period_variance REAL NOT NULL,
+  archetype_importance_score REAL NOT NULL,
+  glue_score REAL NOT NULL,
+  modern_legacy_score REAL NOT NULL,
+  historical_role TEXT NOT NULL CHECK (historical_role IN ('format_pillar', 'archetype_icon', 'flash_in_the_pan', 'role_player')),
+  explanation TEXT NOT NULL,
+  config_json TEXT NOT NULL DEFAULT '{}',
+  PRIMARY KEY (pipeline_run_id, card_name)
+);
+
+CREATE INDEX IF NOT EXISTS idx_historical_card_scores_score ON historical_card_scores(pipeline_run_id, modern_legacy_score DESC);
+CREATE INDEX IF NOT EXISTS idx_historical_card_scores_role ON historical_card_scores(pipeline_run_id, historical_role, modern_legacy_score DESC);
+`
   }
 ];
 
