@@ -13,6 +13,7 @@
   "scripts": {
     "build": "tsup",
     "check": "tsc --noEmit",
+    "candidates:generate": "tsx src/cli/index.ts candidates:generate",
     "collect:all": "tsx src/cli/index.ts collect:all",
     "collect:mtggoldfish": "tsx src/cli/index.ts collect:mtggoldfish",
     "collect:mtgo": "tsx src/cli/index.ts collect:mtgo",

@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
 
-import type { CardScoreRow, DeckCard, DeckSource, NormalizedDeck, RawDeck } from "../types/contracts.js";
+import type { CandidatePool, CardScoreRow, CubeCardRole, DeckCard, DeckSource, NormalizedDeck, RawDeck } from "../types/contracts.js";
 
 export type SourceSnapshotInput = {
   readonly source: DeckSource;
@@ -123,6 +123,23 @@ export type CardArchetypeMatrixInput = {
 
 export type CardScoreInput = CardScoreRow & {
   readonly pipelineRunId: string;
+};
+
+export type PersistedCardRecord = {
+  readonly canonicalName: string;
+  readonly typeLine?: string;
+  readonly manaValue?: number;
+  readonly colors: readonly string[];
+  readonly colorIdentity: readonly string[];
+};
+
+export type CandidatePoolCardInput = {
+  readonly pipelineRunId: string;
+  readonly cardName: string;
+  readonly pool: CandidatePool;
+  readonly score: number;
+  readonly roles: readonly CubeCardRole[];
+  readonly explanation: string;
 };
 
 export function upsertSourceSnapshot(database: DatabaseSync, input: SourceSnapshotInput): string {
@@ -712,6 +729,81 @@ export function listPersistedCardScores(database: DatabaseSync, pipelineRunId: s
   }));
 }
 
+export function listPersistedCards(database: DatabaseSync): readonly PersistedCardRecord[] {
+  const rows = database
+    .prepare(
+      `SELECT canonical_name AS canonicalName, type_line AS typeLine, mana_value AS manaValue,
+              colors_json AS colorsJson, color_identity_json AS colorIdentityJson
+       FROM cards
+       ORDER BY canonical_name`
+    )
+    .all();
+
+  return rows.map((row) => ({
+    canonicalName: String(row.canonicalName),
+    colorIdentity: parseJsonArray(row.colorIdentityJson),
+    colors: parseJsonArray(row.colorsJson),
+    manaValue: row.manaValue === null || row.manaValue === undefined ? undefined : Number(row.manaValue),
+    typeLine: row.typeLine === null || row.typeLine === undefined ? undefined : String(row.typeLine)
+  }));
+}
+
+export function replaceCandidatePoolCards(
+  database: DatabaseSync,
+  pipelineRunId: string,
+  rows: readonly CandidatePoolCardInput[]
+): void {
+  database.exec("BEGIN;");
+  try {
+    database.prepare("DELETE FROM candidate_pool_cards WHERE pipeline_run_id = ?").run(pipelineRunId);
+    const insert = database.prepare(
+      `INSERT INTO candidate_pool_cards (
+        pipeline_run_id, card_name, pool, score, roles_json, explanation
+      )
+      VALUES (?, ?, ?, ?, ?, ?)`
+    );
+
+    for (const row of rows) {
+      insert.run(
+        row.pipelineRunId,
+        row.cardName,
+        row.pool,
+        row.score,
+        JSON.stringify(row.roles),
+        row.explanation
+      );
+    }
+
+    database.exec("COMMIT;");
+  } catch (error) {
+    database.exec("ROLLBACK;");
+    throw error;
+  }
+}
+
+export function listPersistedCandidatePoolCards(
+  database: DatabaseSync,
+  pipelineRunId: string
+): readonly CandidatePoolCardInput[] {
+  const rows = database
+    .prepare(
+      `SELECT pipeline_run_id AS pipelineRunId, card_name AS cardName, pool, score, roles_json AS rolesJson, explanation
+       FROM candidate_pool_cards
+       WHERE pipeline_run_id = ?
+       ORDER BY pool, score DESC, card_name`
+    )
+    .all(pipelineRunId);
+
+  return rows.map((row) => ({
+    cardName: String(row.cardName),
+    explanation: String(row.explanation),
+    pipelineRunId: String(row.pipelineRunId),
+    pool: String(row.pool) as CandidatePool,
+    roles: parseJsonArray(row.rolesJson).filter(isCubeCardRole),
+    score: Number(row.score)
+  }));
+}
+
 function replaceRawDeckCards(
   database: DatabaseSync,
   rawDeckId: string,
@@ -762,4 +854,21 @@ function normalizeMappingStatus(value: string): CardNameMappingRecord["status"] 
   }
 
   return "unresolved";
+}
+
+function parseJsonArray(value: unknown): readonly string[] {
+  if (typeof value !== "string") {
+    return [];
+  }
+
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    return Array.isArray(parsed) ? parsed.map((entry) => String(entry)) : [];
+  } catch {
+    return [];
+  }
+}
+
+function isCubeCardRole(value: string): value is CubeCardRole {
+  return value === "glue" || value === "signpost" || value === "fixing" || value === "support" || value === "curve" || value === "role";
 }

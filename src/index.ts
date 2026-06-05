@@ -1,3 +1,4 @@
+export * from "./build/index.js";
 export * from "./collectors/index.js";
 export * from "./db/index.js";
 export * from "./normalize/index.js";

@@ -147,6 +147,14 @@ pnpm score:cards -- --pipeline-run-id <run-id> --glue-threshold 0.10 --signpost-
 
 Scoring writes `cards_ranked.csv`, `signpost_candidates.csv`, `glue_cards.csv`, and `parasitic_review.csv` from persisted `card_scores` rows.
 
+Generate explainable candidate pools for cube construction:
+
+```bash
+pnpm candidates:generate -- --pipeline-run-id <run-id>
+```
+
+This persists candidate assignments in SQLite and exports `auto_includes.csv`, `glue_cards.csv`, `signpost_cards.csv`, `parasitic_review.csv`, `sideboard_cards.csv`, `lands.csv`, `removal.csv`, and `threats.csv`.
+
 ## Shared Contracts
 
 The initial shared contracts live in `src/types/contracts.ts` and cover:

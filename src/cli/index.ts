@@ -2,6 +2,7 @@
 
 import { existsSync, rmSync } from "node:fs";
 
+import { generateCandidatePools } from "../build/index.js";
 import { runCollectors } from "../collectors/index.js";
 import { defaultProjectPaths } from "../config/paths.js";
 import { applyMigrations, openDatabase } from "../db/index.js";
@@ -42,6 +43,7 @@ Usage:
   cube-refiner dedupe:decks [--db path] [--report-csv path] [--near-overlap count]
   cube-refiner matrix:build [--db path] [--matrix-csv path] [--archetypes-csv path] [--pipeline-run-id id]
   cube-refiner score:cards [--db path] --pipeline-run-id id [--glue-threshold n] [--signpost-affinity n] [--signpost-exclusivity n] [--signpost-min-decks n]
+  cube-refiner candidates:generate [--db path] --pipeline-run-id id [--output-dir path]
 
 Project paths:
   raw data:        ${defaultProjectPaths.rawDataDir}
@@ -206,6 +208,35 @@ if (command === "score:cards") {
     console.log(`Signpost candidates CSV: ${summary.signpostCandidatesCsvPath}`);
     console.log(`Glue cards CSV: ${summary.glueCardsCsvPath}`);
     console.log(`Parasitic review CSV: ${summary.parasiticReviewCsvPath}`);
+  } finally {
+    database.close();
+  }
+  process.exit(0);
+}
+
+if (command === "candidates:generate") {
+  const pipelineRunId = getOptionValue("--pipeline-run-id");
+  if (!pipelineRunId) {
+    console.error("candidates:generate requires --pipeline-run-id.");
+    process.exit(1);
+  }
+
+  const database = openDatabase({ path: databasePath });
+  try {
+    applyMigrations(database);
+    const summary = generateCandidatePools(database, {
+      autoIncludeMinCubeScore: parseNumberOption(getOptionValue("--auto-include-min-cube-score")),
+      glueMinScore: parseNumberOption(getOptionValue("--glue-min-score")),
+      outputDir: getOptionValue("--output-dir") ?? defaultProjectPaths.outputsDir,
+      parasiticMinScore: parseNumberOption(getOptionValue("--parasitic-min-score")),
+      pipelineRunId,
+      sideboardOnlyMinShare: parseNumberOption(getOptionValue("--sideboard-only-min-share")),
+      signpostMinScore: parseNumberOption(getOptionValue("--signpost-min-score"))
+    });
+    console.log(`Persisted ${summary.persistedRows} candidate pool rows for run ${summary.pipelineRunId}.`);
+    for (const [pool, filePath] of Object.entries(summary.exportedCsvPaths)) {
+      console.log(`${pool}: ${filePath}`);
+    }
   } finally {
     database.close();
   }
