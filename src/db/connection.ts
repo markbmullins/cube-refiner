@@ -1,12 +1,16 @@
 import { mkdirSync } from "node:fs";
+import { createRequire } from "node:module";
 import path from "node:path";
-import { DatabaseSync } from "node:sqlite";
+import type { DatabaseSync as NodeSqliteDatabaseSync } from "node:sqlite";
+
+const require = createRequire(import.meta.url);
+const { DatabaseSync } = require("node:sqlite") as typeof import("node:sqlite");
 
 export type OpenDatabaseOptions = {
   readonly path: string;
 };
 
-export function openDatabase(options: OpenDatabaseOptions): DatabaseSync {
+export function openDatabase(options: OpenDatabaseOptions): NodeSqliteDatabaseSync {
   if (options.path !== ":memory:") {
     mkdirSync(path.dirname(options.path), { recursive: true });
   }

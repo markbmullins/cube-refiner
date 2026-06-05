@@ -50,6 +50,28 @@ export type MatrixInputRow = {
   readonly copies: number;
 };
 
+export type RawDeckRecord = {
+  readonly id: string;
+  readonly source: DeckSource;
+  readonly sourceUrl: string;
+  readonly eventDate?: string;
+  readonly reportedArchetype?: string;
+};
+
+export type RawDeckCardRecord = {
+  readonly rawDeckId: string;
+  readonly zone: "mainboard" | "sideboard";
+  readonly name: string;
+  readonly copies: number;
+  readonly position: number;
+};
+
+export type CardNameMappingRecord = {
+  readonly rawName: string;
+  readonly canonicalName?: string;
+  readonly status: "mapped" | "unresolved" | "ignored";
+};
+
 export function upsertSourceSnapshot(database: DatabaseSync, input: SourceSnapshotInput): string {
   const id = stableId("source-snapshot", input.source, input.sourceUrl, input.contentHash);
 
@@ -223,11 +245,12 @@ export function upsertNormalizedDeck(database: DatabaseSync, input: NormalizedDe
     database
       .prepare(
         `INSERT INTO normalized_decks (
-          deck_id, source, source_url, event_date, year, archetype,
+          deck_id, raw_deck_id, source, source_url, event_date, year, archetype,
           archetype_family, fingerprint, weight, updated_at
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(deck_id) DO UPDATE SET
+          raw_deck_id = excluded.raw_deck_id,
           source = excluded.source,
           source_url = excluded.source_url,
           event_date = excluded.event_date,
@@ -240,6 +263,7 @@ export function upsertNormalizedDeck(database: DatabaseSync, input: NormalizedDe
       )
       .run(
         input.deckId,
+        input.rawDeckId ?? null,
         input.source,
         input.sourceUrl,
         input.eventDate,
@@ -270,6 +294,61 @@ export function upsertNormalizedDeck(database: DatabaseSync, input: NormalizedDe
     database.exec("ROLLBACK;");
     throw error;
   }
+}
+
+export function listRawDeckRecords(database: DatabaseSync): readonly RawDeckRecord[] {
+  const rows = database
+    .prepare(
+      `SELECT id, source, source_url AS sourceUrl, event_date AS eventDate, reported_archetype AS reportedArchetype
+       FROM raw_decks
+       ORDER BY source, event_date, id`
+    )
+    .all();
+
+  return rows.map((row) => ({
+    eventDate: row.eventDate === null || row.eventDate === undefined ? undefined : String(row.eventDate),
+    id: String(row.id),
+    reportedArchetype:
+      row.reportedArchetype === null || row.reportedArchetype === undefined ? undefined : String(row.reportedArchetype),
+    source: String(row.source) as DeckSource,
+    sourceUrl: String(row.sourceUrl)
+  }));
+}
+
+export function listRawDeckCardRecords(database: DatabaseSync, rawDeckId: string): readonly RawDeckCardRecord[] {
+  const rows = database
+    .prepare(
+      `SELECT raw_deck_id AS rawDeckId, zone, name, copies, position
+       FROM raw_deck_cards
+       WHERE raw_deck_id = ?
+       ORDER BY zone, position`
+    )
+    .all(rawDeckId);
+
+  return rows.map((row) => ({
+    copies: Number(row.copies),
+    name: String(row.name),
+    position: Number(row.position),
+    rawDeckId: String(row.rawDeckId),
+    zone: String(row.zone) === "sideboard" ? "sideboard" : "mainboard"
+  }));
+}
+
+export function listCardNameMappings(database: DatabaseSync): readonly CardNameMappingRecord[] {
+  const rows = database
+    .prepare("SELECT raw_name AS rawName, canonical_name AS canonicalName, status FROM card_name_mappings")
+    .all();
+
+  return rows.map((row) => ({
+    canonicalName: row.canonicalName === null || row.canonicalName === undefined ? undefined : String(row.canonicalName),
+    rawName: String(row.rawName),
+    status: normalizeMappingStatus(String(row.status))
+  }));
+}
+
+export function listCanonicalCardNames(database: DatabaseSync): readonly string[] {
+  const rows = database.prepare("SELECT canonical_name AS canonicalName FROM cards ORDER BY canonical_name").all();
+  return rows.map((row) => String(row.canonicalName));
 }
 
 export function listMatrixInputRows(database: DatabaseSync): readonly MatrixInputRow[] {
@@ -341,4 +420,12 @@ function stableId(scope: string, ...parts: readonly string[]): string {
 
 export function createPipelineRunId(): string {
   return randomUUID();
+}
+
+function normalizeMappingStatus(value: string): CardNameMappingRecord["status"] {
+  if (value === "mapped" || value === "ignored") {
+    return value;
+  }
+
+  return "unresolved";
 }

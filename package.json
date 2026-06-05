@@ -18,6 +18,7 @@
     "collect:mtgo": "tsx src/cli/index.ts collect:mtgo",
     "collect:mtgtop8": "tsx src/cli/index.ts collect:mtgtop8",
     "dev": "tsx src/cli/index.ts",
+    "normalize:cards": "tsx src/cli/index.ts normalize:cards",
     "test": "vitest run",
     "test:watch": "vitest"
   },

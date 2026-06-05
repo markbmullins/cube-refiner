@@ -93,6 +93,24 @@ pnpm collect:mtggoldfish -- --events grand-prix-las-vegas-2017-modern,23447 --li
 
 When `--events` is omitted, the collector uses a small set of known historical Modern tournament archives and can be filtered with `--years`.
 
+## Normalization Commands
+
+Card normalization imports canonical card records into SQLite, maps raw card names to canonical names, writes normalized deck-card rows, and emits an audit CSV.
+
+Use a local Scryfall default-cards JSON file:
+
+```bash
+pnpm normalize:cards -- --scryfall-file data/scryfall-default-cards.json
+```
+
+Or fetch Scryfall default-cards bulk data during the run:
+
+```bash
+pnpm normalize:cards -- --fetch-scryfall
+```
+
+Unknown card names are persisted as unresolved mapping rows with source/deck context. Add `--fail-on-unknown` when you want the run to fail after writing the audit trail.
+
 ## Shared Contracts
 
 The initial shared contracts live in `src/types/contracts.ts` and cover:

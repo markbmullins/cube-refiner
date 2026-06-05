@@ -24,6 +24,7 @@ export type RawDeck = {
 
 export type NormalizedDeck = {
   readonly deckId: string;
+  readonly rawDeckId?: string;
   readonly source: DeckSource;
   readonly sourceUrl: string;
   readonly eventDate: string;

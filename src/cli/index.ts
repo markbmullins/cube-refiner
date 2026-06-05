@@ -5,6 +5,11 @@ import { existsSync, rmSync } from "node:fs";
 import { runCollectors } from "../collectors/index.js";
 import { defaultProjectPaths } from "../config/paths.js";
 import { applyMigrations, openDatabase } from "../db/index.js";
+import {
+  fetchAndImportScryfallDefaultCards,
+  importScryfallCardsFromFile,
+  normalizeCards
+} from "../normalize/index.js";
 import type { DeckSource } from "../types/contracts.js";
 
 const args = process.argv.slice(2);
@@ -29,6 +34,7 @@ Usage:
   cube-refiner collect:mtgtop8 [--db path] [--raw-dir path] [--refresh]
   cube-refiner collect:mtgo [--db path] [--raw-dir path] [--refresh]
   cube-refiner collect:mtggoldfish [--db path] [--raw-dir path] [--refresh] [--events ids-or-urls]
+  cube-refiner normalize:cards [--db path] [--scryfall-file path] [--fetch-scryfall] [--audit-csv path] [--fail-on-unknown]
 
 Project paths:
   raw data:        ${defaultProjectPaths.rawDataDir}
@@ -66,6 +72,38 @@ if (command.startsWith("collect:")) {
     );
   }
 
+  process.exit(0);
+}
+
+if (command === "normalize:cards") {
+  const database = openDatabase({ path: databasePath });
+  try {
+    applyMigrations(database);
+
+    const scryfallFile = getOptionValue("--scryfall-file");
+    if (scryfallFile) {
+      const imported = importScryfallCardsFromFile(database, scryfallFile);
+      console.log(`Imported ${imported} canonical cards from ${scryfallFile}.`);
+    }
+
+    if (args.includes("--fetch-scryfall")) {
+      const imported = await fetchAndImportScryfallDefaultCards(database);
+      console.log(`Imported ${imported} canonical cards from Scryfall default-cards bulk data.`);
+    }
+
+    const summary = normalizeCards(database, {
+      auditCsvPath: getOptionValue("--audit-csv") ?? `${defaultProjectPaths.outputsDir}/card_name_audit.csv`,
+      failOnUnknown: args.includes("--fail-on-unknown")
+    });
+    console.log(
+      `Normalized ${summary.normalizedDecks} decks; mapped ${summary.mappedNames} raw names; unresolved ${summary.unresolvedNames}.`
+    );
+    if (summary.auditCsvPath) {
+      console.log(`Audit CSV: ${summary.auditCsvPath}`);
+    }
+  } finally {
+    database.close();
+  }
   process.exit(0);
 }
 
