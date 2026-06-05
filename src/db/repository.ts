@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
 
-import type { DeckCard, DeckSource, NormalizedDeck, RawDeck } from "../types/contracts.js";
+import type { CardScoreRow, DeckCard, DeckSource, NormalizedDeck, RawDeck } from "../types/contracts.js";
 
 export type SourceSnapshotInput = {
   readonly source: DeckSource;
@@ -119,6 +119,10 @@ export type CardArchetypeMatrixInput = {
   readonly mainboardCopies: number;
   readonly sideboardCopies: number;
   readonly affinity: number;
+};
+
+export type CardScoreInput = CardScoreRow & {
+  readonly pipelineRunId: string;
 };
 
 export function upsertSourceSnapshot(database: DatabaseSync, input: SourceSnapshotInput): string {
@@ -629,6 +633,82 @@ export function listPersistedMatrixRows(
     pipelineRunId: String(row.pipelineRunId),
     sideboardCopies: Number(row.sideboardCopies),
     totalDecksInArchetype: Number(row.totalDecksInArchetype)
+  }));
+}
+
+export function replaceCardScoreRows(
+  database: DatabaseSync,
+  pipelineRunId: string,
+  rows: readonly CardScoreInput[]
+): void {
+  database.exec("BEGIN;");
+  try {
+    database.prepare("DELETE FROM card_scores WHERE pipeline_run_id = ?").run(pipelineRunId);
+    const insert = database.prepare(
+      `INSERT INTO card_scores (
+        pipeline_run_id, card_name, frequency, glue_score, weighted_glue_score,
+        highest_affinity, second_highest_affinity, exclusivity_score,
+        signpost_score, parasitic_score, cube_score
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    );
+
+    for (const row of rows) {
+      insert.run(
+        row.pipelineRunId,
+        row.cardName,
+        row.frequency,
+        row.glueScore,
+        row.weightedGlueScore,
+        row.highestAffinity,
+        row.secondHighestAffinity,
+        row.exclusivityScore,
+        row.signpostScore,
+        row.parasiticScore,
+        row.cubeScore
+      );
+    }
+
+    database.exec("COMMIT;");
+  } catch (error) {
+    database.exec("ROLLBACK;");
+    throw error;
+  }
+}
+
+export function listPersistedCardScores(database: DatabaseSync, pipelineRunId: string): readonly CardScoreInput[] {
+  const rows = database
+    .prepare(
+      `SELECT
+        pipeline_run_id AS pipelineRunId,
+        card_name AS cardName,
+        frequency,
+        glue_score AS glueScore,
+        weighted_glue_score AS weightedGlueScore,
+        highest_affinity AS highestAffinity,
+        second_highest_affinity AS secondHighestAffinity,
+        exclusivity_score AS exclusivityScore,
+        signpost_score AS signpostScore,
+        parasitic_score AS parasiticScore,
+        cube_score AS cubeScore
+      FROM card_scores
+      WHERE pipeline_run_id = ?
+      ORDER BY cube_score DESC, card_name`
+    )
+    .all(pipelineRunId);
+
+  return rows.map((row) => ({
+    cardName: String(row.cardName),
+    cubeScore: Number(row.cubeScore),
+    exclusivityScore: Number(row.exclusivityScore),
+    frequency: Number(row.frequency),
+    glueScore: Number(row.glueScore),
+    highestAffinity: Number(row.highestAffinity),
+    parasiticScore: Number(row.parasiticScore),
+    pipelineRunId: String(row.pipelineRunId),
+    secondHighestAffinity: Number(row.secondHighestAffinity),
+    signpostScore: Number(row.signpostScore),
+    weightedGlueScore: Number(row.weightedGlueScore)
   }));
 }
 

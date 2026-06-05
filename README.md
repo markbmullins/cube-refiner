@@ -138,6 +138,15 @@ pnpm matrix:build -- --matrix-csv data/outputs/card_archetype_matrix.csv --arche
 
 Matrix rows are persisted in SQLite by pipeline run id, and CSVs are exports from those persisted rows.
 
+Score cards from a persisted matrix run:
+
+```bash
+pnpm score:cards -- --pipeline-run-id <run-id>
+pnpm score:cards -- --pipeline-run-id <run-id> --glue-threshold 0.10 --signpost-affinity 0.60 --signpost-exclusivity 0.40 --signpost-min-decks 5
+```
+
+Scoring writes `cards_ranked.csv`, `signpost_candidates.csv`, `glue_cards.csv`, and `parasitic_review.csv` from persisted `card_scores` rows.
+
 ## Shared Contracts
 
 The initial shared contracts live in `src/types/contracts.ts` and cover:

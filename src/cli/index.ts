@@ -12,7 +12,7 @@ import {
   normalizeArchetypes,
   normalizeCards
 } from "../normalize/index.js";
-import { buildCardArchetypeMatrix } from "../scoring/index.js";
+import { buildCardArchetypeMatrix, scoreCards } from "../scoring/index.js";
 import type { DeckSource } from "../types/contracts.js";
 
 const args = process.argv.slice(2);
@@ -41,6 +41,7 @@ Usage:
   cube-refiner normalize:archetypes [--db path] [--mapping-file path] [--audit-csv path] [--fail-on-unmapped]
   cube-refiner dedupe:decks [--db path] [--report-csv path] [--near-overlap count]
   cube-refiner matrix:build [--db path] [--matrix-csv path] [--archetypes-csv path] [--pipeline-run-id id]
+  cube-refiner score:cards [--db path] --pipeline-run-id id [--glue-threshold n] [--signpost-affinity n] [--signpost-exclusivity n] [--signpost-min-decks n]
 
 Project paths:
   raw data:        ${defaultProjectPaths.rawDataDir}
@@ -179,6 +180,38 @@ if (command === "matrix:build") {
   process.exit(0);
 }
 
+if (command === "score:cards") {
+  const pipelineRunId = getOptionValue("--pipeline-run-id");
+  if (!pipelineRunId) {
+    console.error("score:cards requires --pipeline-run-id.");
+    process.exit(1);
+  }
+
+  const database = openDatabase({ path: databasePath });
+  try {
+    applyMigrations(database);
+    const summary = scoreCards(database, {
+      cardsRankedCsvPath: getOptionValue("--cards-ranked-csv") ?? `${defaultProjectPaths.outputsDir}/cards_ranked.csv`,
+      glueAffinityThreshold: parseNumberOption(getOptionValue("--glue-threshold")),
+      glueCardsCsvPath: getOptionValue("--glue-cards-csv") ?? `${defaultProjectPaths.outputsDir}/glue_cards.csv`,
+      parasiticReviewCsvPath: getOptionValue("--parasitic-review-csv") ?? `${defaultProjectPaths.outputsDir}/parasitic_review.csv`,
+      pipelineRunId,
+      signpostAffinityThreshold: parseNumberOption(getOptionValue("--signpost-affinity")),
+      signpostCandidatesCsvPath: getOptionValue("--signpost-candidates-csv") ?? `${defaultProjectPaths.outputsDir}/signpost_candidates.csv`,
+      signpostExclusivityThreshold: parseNumberOption(getOptionValue("--signpost-exclusivity")),
+      signpostMinDecksWithCard: parsePositiveInteger(getOptionValue("--signpost-min-decks"))
+    });
+    console.log(`Scored ${summary.scoreRows} cards for run ${summary.pipelineRunId}.`);
+    console.log(`Cards ranked CSV: ${summary.cardsRankedCsvPath}`);
+    console.log(`Signpost candidates CSV: ${summary.signpostCandidatesCsvPath}`);
+    console.log(`Glue cards CSV: ${summary.glueCardsCsvPath}`);
+    console.log(`Parasitic review CSV: ${summary.parasiticReviewCsvPath}`);
+  } finally {
+    database.close();
+  }
+  process.exit(0);
+}
+
 if (command === "db:init" || command === "db:migrate") {
   const database = openDatabase({ path: databasePath });
   try {
@@ -253,4 +286,9 @@ function collectorSourcesForCommand(value: string): readonly DeckSource[] | unde
 function parsePositiveInteger(value: string | undefined): number | undefined {
   const parsed = value ? Number(value) : undefined;
   return parsed && Number.isInteger(parsed) && parsed > 0 ? parsed : undefined;
+}
+
+function parseNumberOption(value: string | undefined): number | undefined {
+  const parsed = value ? Number(value) : undefined;
+  return parsed === undefined || Number.isNaN(parsed) ? undefined : parsed;
 }
