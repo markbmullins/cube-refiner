@@ -110,6 +110,38 @@ export type PipelineRunInput = {
   readonly completedAt?: string;
 };
 
+export type PipelineStageRunInput = {
+  readonly pipelineRunId: string;
+  readonly stage: string;
+  readonly status: "running" | "completed" | "failed";
+  readonly configHash: string;
+  readonly startedAt?: string;
+  readonly completedAt?: string;
+  readonly inputRefs?: unknown;
+  readonly outputRefs?: unknown;
+  readonly rowCount?: number;
+  readonly error?: unknown;
+};
+
+export type ConfigProfileInput = {
+  readonly name: string;
+  readonly configHash: string;
+  readonly config: unknown;
+  readonly createdAt?: string;
+  readonly updatedAt?: string;
+};
+
+export type OutputArtifactInput = {
+  readonly id?: string;
+  readonly pipelineRunId?: string;
+  readonly stage: string;
+  readonly path: string;
+  readonly format: string;
+  readonly contentHash: string;
+  readonly generatedAt?: string;
+  readonly sourceMetadata?: unknown;
+};
+
 export type CardArchetypeMatrixInput = {
   readonly pipelineRunId: string;
   readonly cardName: string;
@@ -242,6 +274,80 @@ export function upsertPipelineRun(database: DatabaseSync, input: PipelineRunInpu
       input.configHash,
       input.status ?? "running"
     );
+}
+
+export function upsertPipelineStageRun(database: DatabaseSync, input: PipelineStageRunInput): void {
+  database
+    .prepare(
+      `INSERT INTO pipeline_stage_runs (
+        pipeline_run_id, stage, status, config_hash, started_at, completed_at,
+        input_refs_json, output_refs_json, row_count, error_json
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(pipeline_run_id, stage) DO UPDATE SET
+        status = excluded.status,
+        config_hash = excluded.config_hash,
+        completed_at = excluded.completed_at,
+        input_refs_json = excluded.input_refs_json,
+        output_refs_json = excluded.output_refs_json,
+        row_count = excluded.row_count,
+        error_json = excluded.error_json`
+    )
+    .run(
+      input.pipelineRunId,
+      input.stage,
+      input.status,
+      input.configHash,
+      input.startedAt ?? new Date().toISOString(),
+      input.completedAt ?? null,
+      JSON.stringify(input.inputRefs ?? {}),
+      JSON.stringify(input.outputRefs ?? {}),
+      input.rowCount ?? 0,
+      JSON.stringify(input.error ?? {})
+    );
+}
+
+export function upsertConfigProfile(database: DatabaseSync, input: ConfigProfileInput): void {
+  const now = new Date().toISOString();
+  database
+    .prepare(
+      `INSERT INTO config_profiles (name, config_hash, config_json, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT(name) DO UPDATE SET
+         config_hash = excluded.config_hash,
+         config_json = excluded.config_json,
+         updated_at = excluded.updated_at`
+    )
+    .run(input.name, input.configHash, JSON.stringify(input.config), input.createdAt ?? now, input.updatedAt ?? now);
+}
+
+export function registerOutputArtifact(database: DatabaseSync, input: OutputArtifactInput): string {
+  const id = input.id ?? stableId("output-artifact", input.path, input.contentHash);
+  database
+    .prepare(
+      `INSERT INTO output_artifacts (
+        id, pipeline_run_id, stage, path, format, content_hash, generated_at, source_metadata_json
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(path, content_hash) DO UPDATE SET
+        pipeline_run_id = excluded.pipeline_run_id,
+        stage = excluded.stage,
+        format = excluded.format,
+        generated_at = excluded.generated_at,
+        source_metadata_json = excluded.source_metadata_json`
+    )
+    .run(
+      id,
+      input.pipelineRunId ?? null,
+      input.stage,
+      input.path,
+      input.format,
+      input.contentHash,
+      input.generatedAt ?? new Date().toISOString(),
+      JSON.stringify(input.sourceMetadata ?? {})
+    );
+
+  return id;
 }
 
 export function upsertRawDeck(

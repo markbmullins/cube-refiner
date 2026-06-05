@@ -236,6 +236,49 @@ CREATE TABLE IF NOT EXISTS validation_zero_support_cards (
 CREATE INDEX IF NOT EXISTS idx_validation_metrics_run ON validation_metrics(validation_run_id, metric_key);
 CREATE INDEX IF NOT EXISTS idx_validation_zero_support_run ON validation_zero_support_cards(validation_run_id, position);
 `
+  },
+  {
+    description: "Pipeline stage lineage, config profiles, and output artifacts",
+    id: "0003_pipeline_lineage_artifacts",
+    sql: `
+CREATE TABLE IF NOT EXISTS pipeline_stage_runs (
+  pipeline_run_id TEXT NOT NULL REFERENCES pipeline_runs(id) ON DELETE CASCADE,
+  stage TEXT NOT NULL,
+  status TEXT NOT NULL CHECK (status IN ('running', 'completed', 'failed')),
+  config_hash TEXT NOT NULL,
+  started_at TEXT NOT NULL,
+  completed_at TEXT,
+  input_refs_json TEXT NOT NULL DEFAULT '{}',
+  output_refs_json TEXT NOT NULL DEFAULT '{}',
+  row_count INTEGER NOT NULL DEFAULT 0,
+  error_json TEXT NOT NULL DEFAULT '{}',
+  PRIMARY KEY (pipeline_run_id, stage)
+);
+
+CREATE TABLE IF NOT EXISTS config_profiles (
+  name TEXT PRIMARY KEY,
+  config_hash TEXT NOT NULL,
+  config_json TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS output_artifacts (
+  id TEXT PRIMARY KEY,
+  pipeline_run_id TEXT REFERENCES pipeline_runs(id) ON DELETE SET NULL,
+  stage TEXT NOT NULL,
+  path TEXT NOT NULL,
+  format TEXT NOT NULL,
+  content_hash TEXT NOT NULL,
+  generated_at TEXT NOT NULL,
+  source_metadata_json TEXT NOT NULL DEFAULT '{}',
+  UNIQUE (path, content_hash)
+);
+
+CREATE INDEX IF NOT EXISTS idx_pipeline_stage_runs_pipeline ON pipeline_stage_runs(pipeline_run_id, stage);
+CREATE INDEX IF NOT EXISTS idx_output_artifacts_pipeline ON output_artifacts(pipeline_run_id, stage);
+CREATE INDEX IF NOT EXISTS idx_output_artifacts_hash ON output_artifacts(content_hash);
+`
   }
 ];
 

@@ -28,6 +28,7 @@ src/
   scoring/      Matrix and scoring algorithms
   build/        Candidate-pool and cube-generation logic
   export/       CSV and Cube Cobra exporters
+  pipeline.ts   End-to-end pipeline orchestration
   types/        Shared data contracts
 ```
 
@@ -61,6 +62,36 @@ pnpm dev -- db:migrate
 pnpm dev -- db:reset
 pnpm dev -- db:init --db data/cube-refiner.sqlite
 ```
+
+## End-to-End Pipeline
+
+Run the full DB-first pipeline from collection through validation and exports:
+
+```bash
+pnpm pipeline:run -- --scryfall-file data/scryfall-default-cards.json
+```
+
+For local iteration against decklists and cards already stored in SQLite, skip live collection:
+
+```bash
+pnpm pipeline:run -- --skip-collect --pipeline-run-id modern-nostalgia-v1 --total-cards 360
+```
+
+The full pipeline records a `pipeline_runs` row, stage lineage rows, a saved `pipeline:latest` config profile, and artifact registry rows for generated CSV/text outputs. Targeted commands use the same SQLite tables between stages; CSV and JSON files are raw snapshots, audits, or exports.
+
+Major outputs are written to `data/outputs/` by default:
+
+- `cards_ranked.csv`
+- `card_archetype_matrix.csv`
+- `archetypes_summary.csv`
+- `signpost_candidates.csv`
+- `glue_cards.csv`
+- `parasitic_review.csv`
+- `cube_360_candidate.csv`
+- `cube_validation_report.csv`
+- `cube_cobra_import.txt`
+
+The key construction idea is to use scoring to produce explainable candidate pools first, then let the cube generator apply constraints for section balance, fixing, archetype support, curve, and role coverage instead of simply taking the top 360 cards by score.
 
 ## Collector Commands
 

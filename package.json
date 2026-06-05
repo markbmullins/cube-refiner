@@ -25,6 +25,7 @@
     "matrix:build": "tsx src/cli/index.ts matrix:build",
     "normalize:archetypes": "tsx src/cli/index.ts normalize:archetypes",
     "normalize:cards": "tsx src/cli/index.ts normalize:cards",
+    "pipeline:run": "tsx src/cli/index.ts pipeline:run",
     "score:cards": "tsx src/cli/index.ts score:cards",
     "test": "vitest run",
     "test:watch": "vitest"

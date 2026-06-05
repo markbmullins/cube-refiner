@@ -13,6 +13,7 @@ import {
   normalizeArchetypes,
   normalizeCards
 } from "../normalize/index.js";
+import { runFullPipeline } from "../pipeline.js";
 import { buildCardArchetypeMatrix, scoreCards } from "../scoring/index.js";
 import type { DeckSource } from "../types/contracts.js";
 
@@ -31,6 +32,7 @@ if (command === "help" || command === "--help" || command === "-h") {
 
 Usage:
   cube-refiner help
+  cube-refiner pipeline:run [--db path] [--raw-dir path] [--output-dir path] [--skip-collect] [--scryfall-file path] [--fetch-scryfall] [--pipeline-run-id id] [--cube-run-id id]
   cube-refiner db:init [--db path]
   cube-refiner db:migrate [--db path]
   cube-refiner db:reset [--db path]
@@ -53,6 +55,37 @@ Project paths:
   outputs:         ${defaultProjectPaths.outputsDir}
   sqlite db:       ${defaultProjectPaths.sqliteDatabasePath}
 `);
+  process.exit(0);
+}
+
+if (command === "pipeline:run") {
+  const summary = await runFullPipeline({
+    collectorOptions: {
+      limitDecks: getOptionValue("--limit-decks"),
+      limitEvents: getOptionValue("--limit-events"),
+      events: getOptionValue("--events"),
+      months: getOptionValue("--months"),
+      years: getOptionValue("--years")
+    },
+    databasePath,
+    fetchScryfall: args.includes("--fetch-scryfall"),
+    outputDir: getOptionValue("--output-dir") ?? defaultProjectPaths.outputsDir,
+    pipelineRunId: getOptionValue("--pipeline-run-id"),
+    rawDataDir,
+    refresh,
+    scryfallFile: getOptionValue("--scryfall-file"),
+    skipCollect: args.includes("--skip-collect"),
+    totalCards: parsePositiveInteger(getOptionValue("--total-cards")),
+    cubeRunId: getOptionValue("--cube-run-id"),
+    validationRunId: getOptionValue("--validation-run-id")
+  });
+
+  console.log(`Pipeline run ${summary.pipelineRunId} completed.`);
+  console.log(`Cube run: ${summary.cubeRunId}`);
+  console.log(`Validation run: ${summary.validationRunId}`);
+  for (const artifactPath of summary.artifactPaths) {
+    console.log(`Artifact: ${artifactPath}`);
+  }
   process.exit(0);
 }
 
