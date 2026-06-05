@@ -47,6 +47,11 @@ if (command.startsWith("collect:")) {
   }
 
   const summaries = await runCollectors({
+    collectorOptions: {
+      limitDecks: getOptionValue("--limit-decks"),
+      limitEvents: getOptionValue("--limit-events"),
+      years: getOptionValue("--years")
+    },
     databasePath,
     rawDataDir,
     refresh,

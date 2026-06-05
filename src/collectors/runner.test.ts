@@ -20,13 +20,13 @@ describe("collector runner", () => {
         warn: () => undefined
       },
       rawDataDir,
-      sources: ["mtgtop8"]
+      sources: ["mtgo"]
     });
 
     expect(summaries).toHaveLength(1);
-    expect(summaries[0]?.source).toBe("mtgtop8");
+    expect(summaries[0]?.source).toBe("mtgo");
     expect(summaries[0]?.deckCount).toBe(0);
-    expect(summaries[0]?.parsedOutputPath).toContain(path.join("mtgtop8", "parsed"));
+    expect(summaries[0]?.parsedOutputPath).toContain(path.join("mtgo", "parsed"));
     expect(existsSync(summaries[0]?.parsedOutputPath ?? "")).toBe(true);
     expect(JSON.parse(readFileSync(summaries[0]?.parsedOutputPath ?? "", "utf8"))).toEqual([]);
   });

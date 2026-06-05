@@ -1,8 +1,9 @@
 import type { DeckSource } from "../types/contracts.js";
 import type { CollectorContext, DeckCollector } from "./types.js";
+import { mtgTop8Collector } from "./mtgtop8.js";
 
 const plannedCollectors: readonly DeckCollector[] = [
-  createPlannedCollector("mtgtop8"),
+  mtgTop8Collector,
   createPlannedCollector("mtgo"),
   createPlannedCollector("mtggoldfish")
 ];

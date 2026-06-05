@@ -73,6 +73,12 @@ pnpm collect:mtggoldfish
 
 Collector runs write source snapshots under `data/raw/{source}/`, upsert raw deck metadata and cards into SQLite, and emit parsed deck JSON snapshots for auditability.
 
+MTGTop8 supports focused historical runs:
+
+```bash
+pnpm collect:mtgtop8 -- --years 2015 --limit-events 1 --limit-decks 2
+```
+
 ## Shared Contracts
 
 The initial shared contracts live in `src/types/contracts.ts` and cover:

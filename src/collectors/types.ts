@@ -42,10 +42,13 @@ export type SnapshotStore = {
   readonly writeParsedDecks: (source: DeckSource, label: string, decks: readonly RawDeck[]) => string;
 };
 
+export type CollectorOptions = Readonly<Record<string, string | undefined>>;
+
 export type CollectorContext = {
   readonly database: DatabaseSync;
   readonly fetcher: Fetcher;
   readonly logger: CollectorLogger;
+  readonly options: CollectorOptions;
   readonly paths: ProjectPaths;
   readonly refresh: boolean;
   readonly snapshotStore: SnapshotStore;

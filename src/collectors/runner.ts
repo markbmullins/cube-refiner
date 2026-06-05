@@ -6,6 +6,7 @@ import { allCollectorSources, getCollectors } from "./registry.js";
 import type { CollectorLogger, CollectorRunSummary, DeckCollector, Fetcher } from "./types.js";
 
 export type RunCollectorsOptions = {
+  readonly collectorOptions?: Readonly<Record<string, string | undefined>>;
   readonly databasePath?: string;
   readonly fetcher?: Fetcher;
   readonly logger?: CollectorLogger;
@@ -40,6 +41,7 @@ export async function runCollectors(options: RunCollectorsOptions = {}): Promise
           database,
           fetcher,
           logger,
+          options: options.collectorOptions ?? {},
           paths,
           refresh: options.refresh === true,
           snapshotStore
