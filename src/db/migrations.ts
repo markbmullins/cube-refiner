@@ -327,6 +327,45 @@ CREATE INDEX IF NOT EXISTS idx_metagame_periods_sort ON metagame_periods(model, 
 CREATE INDEX IF NOT EXISTS idx_deck_metagame_periods_period ON deck_metagame_periods(period_id);
 CREATE INDEX IF NOT EXISTS idx_metagame_period_reviews_deck ON metagame_period_assignment_reviews(deck_id);
 `
+  },
+  {
+    description: "Historical source coverage summaries and warnings",
+    id: "0005_historical_source_coverage",
+    sql: `
+CREATE TABLE IF NOT EXISTS historical_source_coverage (
+  pipeline_run_id TEXT NOT NULL REFERENCES pipeline_runs(id) ON DELETE CASCADE,
+  period_id TEXT NOT NULL REFERENCES metagame_periods(period_id) ON DELETE CASCADE,
+  set_code TEXT NOT NULL,
+  set_name TEXT NOT NULL,
+  period_start_date TEXT NOT NULL,
+  period_end_date TEXT NOT NULL,
+  year INTEGER NOT NULL,
+  source TEXT NOT NULL CHECK (source IN ('mtgtop8', 'mtggoldfish', 'mtgo')),
+  archetype_family TEXT NOT NULL,
+  deck_count INTEGER NOT NULL CHECK (deck_count >= 0),
+  source_status TEXT NOT NULL CHECK (source_status IN ('available', 'unavailable', 'unknown')),
+  coverage_status TEXT NOT NULL CHECK (coverage_status IN ('observed_play', 'no_observed_play', 'missing_source_coverage')),
+  warning_codes_json TEXT NOT NULL DEFAULT '[]',
+  generated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (pipeline_run_id, period_id, source, archetype_family)
+);
+
+CREATE TABLE IF NOT EXISTS historical_coverage_warnings (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  pipeline_run_id TEXT NOT NULL REFERENCES pipeline_runs(id) ON DELETE CASCADE,
+  period_id TEXT NOT NULL REFERENCES metagame_periods(period_id) ON DELETE CASCADE,
+  source TEXT CHECK (source IN ('mtgtop8', 'mtggoldfish', 'mtgo')),
+  warning_type TEXT NOT NULL CHECK (warning_type IN ('empty_period', 'thin_period', 'missing_source_coverage')),
+  severity TEXT NOT NULL CHECK (severity IN ('warn', 'fail')),
+  message TEXT NOT NULL,
+  metadata_json TEXT NOT NULL DEFAULT '{}',
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_historical_source_coverage_period ON historical_source_coverage(period_id, source);
+CREATE INDEX IF NOT EXISTS idx_historical_source_coverage_year ON historical_source_coverage(year, source);
+CREATE INDEX IF NOT EXISTS idx_historical_coverage_warnings_run ON historical_coverage_warnings(pipeline_run_id, period_id);
+`
   }
 ];
 

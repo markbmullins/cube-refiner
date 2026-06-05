@@ -1,0 +1,23 @@
+[
+  {
+    "source": "mtgtop8",
+    "startDate": "2011-08-12",
+    "endDate": "2019-04-30",
+    "status": "available",
+    "notes": "Configured as a historical tournament archive source for the project range."
+  },
+  {
+    "source": "mtggoldfish",
+    "startDate": "2011-08-12",
+    "endDate": "2019-04-30",
+    "status": "unknown",
+    "notes": "Coverage depends on explicit tournament archive backfill; zero rows should be reviewed as coverage gaps."
+  },
+  {
+    "source": "mtgo",
+    "startDate": "2011-08-12",
+    "endDate": "2019-04-30",
+    "status": "unknown",
+    "notes": "Historical archive availability varies by period; zero rows should be reviewed as coverage gaps until backfill policy is configured."
+  }
+]

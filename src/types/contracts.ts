@@ -146,3 +146,43 @@ export type MetagamePeriodAssignmentReview = {
   readonly reason: MetagamePeriodAssignmentReviewReason;
   readonly metadata?: unknown;
 };
+
+export type HistoricalSourceCoverageStatus = "available" | "unavailable" | "unknown";
+
+export type HistoricalCoverageInterpretation = "observed_play" | "no_observed_play" | "missing_source_coverage";
+
+export type HistoricalCoverageWarningType = "empty_period" | "thin_period" | "missing_source_coverage";
+
+export type SourceCoverageManifestEntry = {
+  readonly source: DeckSource;
+  readonly startDate: string;
+  readonly endDate: string;
+  readonly status: HistoricalSourceCoverageStatus;
+  readonly notes?: string;
+};
+
+export type HistoricalSourceCoverageRow = {
+  readonly pipelineRunId: string;
+  readonly periodId: string;
+  readonly setCode: string;
+  readonly setName: string;
+  readonly periodStartDate: string;
+  readonly periodEndDate: string;
+  readonly year: number;
+  readonly source: DeckSource;
+  readonly archetypeFamily: string;
+  readonly deckCount: number;
+  readonly sourceStatus: HistoricalSourceCoverageStatus;
+  readonly coverageStatus: HistoricalCoverageInterpretation;
+  readonly warningCodes: readonly HistoricalCoverageWarningType[];
+};
+
+export type HistoricalCoverageWarning = {
+  readonly pipelineRunId: string;
+  readonly periodId: string;
+  readonly source?: DeckSource;
+  readonly warningType: HistoricalCoverageWarningType;
+  readonly severity: "warn" | "fail";
+  readonly message: string;
+  readonly metadata?: unknown;
+};

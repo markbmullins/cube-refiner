@@ -7,6 +7,12 @@ import { generateCandidatePools, generateCube, validateCube } from "../build/ind
 import { runCollectors } from "../collectors/index.js";
 import { defaultProjectPaths } from "../config/paths.js";
 import {
+  defaultHistoricalCoverageCsvPath,
+  defaultMinimumDecksPerPeriod,
+  defaultSourceCoverageManifestPath,
+  generateHistoricalCoverageReport
+} from "../coverage.js";
+import {
   applyMigrations,
   getDatabaseStatus,
   listConfigProfiles,
@@ -73,6 +79,7 @@ Usage:
   cube-refiner periods:generate [--db path] [--set-releases-file path] [--start-date YYYY-MM-DD] [--end-date YYYY-MM-DD] [--model standard-set-release]
   cube-refiner periods:list [--db path] [--json]
   cube-refiner periods:assign [--db path]
+  cube-refiner coverage:historical [--db path] [--output-csv path] [--source-manifest path] [--min-decks n] [--pipeline-run-id id]
   cube-refiner matrix:build [--db path] [--matrix-csv path] [--archetypes-csv path] [--pipeline-run-id id]
   cube-refiner score:cards [--db path] --pipeline-run-id id [--glue-threshold n] [--signpost-affinity n] [--signpost-exclusivity n] [--signpost-min-decks n]
   cube-refiner candidates:generate [--db path] --pipeline-run-id id [--output-dir path]
@@ -282,6 +289,31 @@ if (command === "periods:assign") {
     applyMigrations(database);
     const summary = assignDecksToMetagamePeriods(database);
     console.log(`Assigned ${summary.assignedDecks} decks to metagame periods; review rows ${summary.reviewRows}.`);
+  } finally {
+    database.close();
+  }
+  process.exit(0);
+}
+
+if (command === "coverage:historical") {
+  const database = openDatabase({ path: databasePath });
+  try {
+    applyMigrations(database);
+    const summary = generateHistoricalCoverageReport(database, {
+      minimumDecksPerPeriod: parsePositiveInteger(getOptionValue("--min-decks")) ?? defaultMinimumDecksPerPeriod,
+      outputCsvPath: getOptionValue("--output-csv") ?? defaultHistoricalCoverageCsvPath,
+      pipelineRunId: getOptionValue("--pipeline-run-id"),
+      sourceManifestPath: getOptionValue("--source-manifest") ?? defaultSourceCoverageManifestPath
+    });
+    console.log(
+      `Generated historical source coverage for run ${summary.pipelineRunId}: ${summary.rows} rows, ${summary.warnings} warnings.`
+    );
+    console.log(
+      `Period assignments refreshed: ${summary.assignedDecks} assigned, ${summary.assignmentReviewRows} review rows.`
+    );
+    if (summary.outputCsvPath) {
+      console.log(`Coverage CSV: ${summary.outputCsvPath}`);
+    }
   } finally {
     database.close();
   }
@@ -653,6 +685,7 @@ function parseReviewQueue(value: string | undefined): Parameters<typeof listManu
     value === "archetype_gaps" ||
     value === "dedupe_ambiguities" ||
     value === "period_assignments" ||
+    value === "historical_coverage" ||
     value === "parasitic_cards" ||
     value === "validation_warnings" ||
     value === "zero_support_cards"

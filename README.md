@@ -88,6 +88,15 @@ pnpm dev -- db:reviews --queue period_assignments
 
 `periods:generate` seeds the release calendar into SQLite before creating `metagame_periods`, so a clean database can be initialized with one command. `periods:assign` maps normalized decks to periods by event date and persists out-of-range or invalid dates in the `period_assignments` review queue.
 
+Audit historical source coverage after periods exist:
+
+```bash
+pnpm dev -- coverage:historical --min-decks 8
+pnpm dev -- db:reviews --queue historical_coverage
+```
+
+The coverage command refreshes deck-to-period assignments, writes `data/outputs/historical_source_coverage.csv`, persists period/source/archetype-family coverage rows, and registers the CSV as an artifact. The report includes a year rollup column for readability, but every warning is anchored to the primary set-release period. Empty periods, periods below the configured deck threshold, and zero-count sources marked `unknown` or `unavailable` in `data/source-coverage-manifest.json` become DB-backed review warnings so missing source coverage is not treated as zero observed play.
+
 ## End-to-End Pipeline
 
 Run the full DB-first pipeline from collection through validation and exports:
@@ -115,6 +124,7 @@ Major outputs are written to `data/outputs/` by default:
 - `cube_360_candidate.csv`
 - `cube_validation_report.csv`
 - `cube_cobra_import.txt`
+- `historical_source_coverage.csv`
 
 The key construction idea is to use scoring to produce explainable candidate pools first, then let the cube generator apply constraints for section balance, fixing, archetype support, curve, and role coverage instead of simply taking the top 360 cards by score.
 
@@ -244,3 +254,4 @@ The initial shared contracts live in `src/types/contracts.ts` and cover:
 - Standard set releases
 - metagame periods
 - deck-to-period assignments and review rows
+- historical source coverage rows and warnings

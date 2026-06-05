@@ -28,6 +28,7 @@ export type ManualReviewQueue =
   | "archetype_gaps"
   | "dedupe_ambiguities"
   | "period_assignments"
+  | "historical_coverage"
   | "parasitic_cards"
   | "validation_warnings"
   | "zero_support_cards";
@@ -80,6 +81,8 @@ export function getDatabaseStatus(database: DatabaseSync): DatabaseStatusSummary
       "metagame_periods",
       "deck_metagame_periods",
       "metagame_period_assignment_reviews",
+      "historical_source_coverage",
+      "historical_coverage_warnings",
       "output_artifacts"
     ].map((table) => [table, tableCount(database, table)])
   );
@@ -113,6 +116,7 @@ export function listManualReviewItems(
         "archetype_gaps",
         "dedupe_ambiguities",
         "period_assignments",
+        "historical_coverage",
         "parasitic_cards",
         "validation_warnings",
         "zero_support_cards"
@@ -297,6 +301,33 @@ function listQueue(database: DatabaseSync, queue: ManualReviewQueue): readonly M
         reviewItem(queue, String(row.deckId ?? `review-${String(row.id)}`), `Period assignment ${String(row.reason)}`, {
           ...parseJsonObject(row.metadataJson),
           eventDate: row.eventDate
+        })
+      );
+  }
+
+  if (queue === "historical_coverage") {
+    return database
+      .prepare(
+        `SELECT
+          id,
+          pipeline_run_id AS pipelineRunId,
+          period_id AS periodId,
+          source,
+          warning_type AS warningType,
+          severity,
+          message,
+          metadata_json AS metadataJson
+         FROM historical_coverage_warnings
+         ORDER BY pipeline_run_id, id`
+      )
+      .all()
+      .map((row) =>
+        reviewItem(queue, String(row.source ?? row.periodId), String(row.message), {
+          ...parseJsonObject(row.metadataJson),
+          periodId: row.periodId,
+          pipelineRunId: row.pipelineRunId,
+          severity: row.severity,
+          warningType: row.warningType
         })
       );
   }

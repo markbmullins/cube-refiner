@@ -7,6 +7,10 @@ import type {
   CubeCardRole,
   DeckCard,
   DeckSource,
+  HistoricalCoverageWarning,
+  HistoricalCoverageWarningType,
+  HistoricalSourceCoverageRow,
+  HistoricalSourceCoverageStatus,
   MetaPeriod,
   MetagamePeriodAssignmentReview,
   MetagamePeriodModel,
@@ -121,6 +125,18 @@ export type MetagamePeriodAssignmentReviewRecord = {
   readonly eventDate?: string;
   readonly reason: string;
   readonly metadata: unknown;
+  readonly createdAt: string;
+};
+
+export type HistoricalCoverageInputRecord = {
+  readonly deckId: string;
+  readonly periodId: string;
+  readonly source: DeckSource;
+  readonly archetypeFamily: string;
+};
+
+export type HistoricalCoverageWarningRecord = HistoricalCoverageWarning & {
+  readonly id: number;
   readonly createdAt: string;
 };
 
@@ -808,6 +824,193 @@ export function listMetagamePeriodAssignmentReviews(
     id: Number(row.id),
     metadata: parseJson(String(row.metadataJson), {}),
     reason: String(row.reason)
+  }));
+}
+
+export function listHistoricalCoverageInputRows(database: DatabaseSync): readonly HistoricalCoverageInputRecord[] {
+  const rows = database
+    .prepare(
+      `SELECT
+        nd.deck_id AS deckId,
+        dmp.period_id AS periodId,
+        nd.source,
+        nd.archetype_family AS archetypeFamily
+       FROM deck_metagame_periods dmp
+       JOIN normalized_decks nd ON nd.deck_id = dmp.deck_id
+       ORDER BY dmp.period_id, nd.source, nd.archetype_family, nd.deck_id`
+    )
+    .all();
+
+  return rows.map((row) => ({
+    archetypeFamily: String(row.archetypeFamily),
+    deckId: String(row.deckId),
+    periodId: String(row.periodId),
+    source: String(row.source) as DeckSource
+  }));
+}
+
+export function replaceHistoricalSourceCoverageRows(
+  database: DatabaseSync,
+  pipelineRunId: string,
+  rows: readonly HistoricalSourceCoverageRow[],
+  warnings: readonly HistoricalCoverageWarning[]
+): void {
+  database.exec("BEGIN;");
+  try {
+    database.prepare("DELETE FROM historical_source_coverage WHERE pipeline_run_id = ?").run(pipelineRunId);
+    database.prepare("DELETE FROM historical_coverage_warnings WHERE pipeline_run_id = ?").run(pipelineRunId);
+
+    const insertRow = database.prepare(
+      `INSERT INTO historical_source_coverage (
+        pipeline_run_id, period_id, set_code, set_name, period_start_date,
+        period_end_date, year, source, archetype_family, deck_count,
+        source_status, coverage_status, warning_codes_json
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    );
+    for (const row of rows) {
+      insertRow.run(
+        row.pipelineRunId,
+        row.periodId,
+        row.setCode,
+        row.setName,
+        row.periodStartDate,
+        row.periodEndDate,
+        row.year,
+        row.source,
+        row.archetypeFamily,
+        row.deckCount,
+        row.sourceStatus,
+        row.coverageStatus,
+        JSON.stringify(row.warningCodes)
+      );
+    }
+
+    const insertWarning = database.prepare(
+      `INSERT INTO historical_coverage_warnings (
+        pipeline_run_id, period_id, source, warning_type, severity, message, metadata_json
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?)`
+    );
+    for (const warning of warnings) {
+      insertWarning.run(
+        warning.pipelineRunId,
+        warning.periodId,
+        warning.source ?? null,
+        warning.warningType,
+        warning.severity,
+        warning.message,
+        JSON.stringify(warning.metadata ?? {})
+      );
+    }
+
+    database.exec("COMMIT;");
+  } catch (error) {
+    database.exec("ROLLBACK;");
+    throw error;
+  }
+}
+
+export function listHistoricalSourceCoverageRows(
+  database: DatabaseSync,
+  pipelineRunId: string
+): readonly HistoricalSourceCoverageRow[] {
+  const rows = database
+    .prepare(
+      `SELECT
+        pipeline_run_id AS pipelineRunId,
+        period_id AS periodId,
+        set_code AS setCode,
+        set_name AS setName,
+        period_start_date AS periodStartDate,
+        period_end_date AS periodEndDate,
+        year,
+        source,
+        archetype_family AS archetypeFamily,
+        deck_count AS deckCount,
+        source_status AS sourceStatus,
+        coverage_status AS coverageStatus,
+        warning_codes_json AS warningCodesJson
+       FROM historical_source_coverage
+       WHERE pipeline_run_id = ?
+       ORDER BY
+        period_start_date,
+        CASE source
+          WHEN 'mtgtop8' THEN 0
+          WHEN 'mtggoldfish' THEN 1
+          WHEN 'mtgo' THEN 2
+          ELSE 3
+        END,
+        archetype_family`
+    )
+    .all(pipelineRunId);
+
+  return rows.map((row) => ({
+    archetypeFamily: String(row.archetypeFamily),
+    coverageStatus: String(row.coverageStatus) as HistoricalSourceCoverageRow["coverageStatus"],
+    deckCount: Number(row.deckCount),
+    periodEndDate: String(row.periodEndDate),
+    periodId: String(row.periodId),
+    periodStartDate: String(row.periodStartDate),
+    pipelineRunId: String(row.pipelineRunId),
+    setCode: String(row.setCode),
+    setName: String(row.setName),
+    source: String(row.source) as DeckSource,
+    sourceStatus: String(row.sourceStatus) as HistoricalSourceCoverageStatus,
+    warningCodes: parseJsonArray(row.warningCodesJson).filter(isHistoricalCoverageWarningType),
+    year: Number(row.year)
+  }));
+}
+
+export function listHistoricalCoverageWarnings(
+  database: DatabaseSync,
+  pipelineRunId?: string
+): readonly HistoricalCoverageWarningRecord[] {
+  const rows = pipelineRunId
+    ? database
+        .prepare(
+          `SELECT
+            id,
+            pipeline_run_id AS pipelineRunId,
+            period_id AS periodId,
+            source,
+            warning_type AS warningType,
+            severity,
+            message,
+            metadata_json AS metadataJson,
+            created_at AS createdAt
+           FROM historical_coverage_warnings
+           WHERE pipeline_run_id = ?
+           ORDER BY id`
+        )
+        .all(pipelineRunId)
+    : database
+        .prepare(
+          `SELECT
+            id,
+            pipeline_run_id AS pipelineRunId,
+            period_id AS periodId,
+            source,
+            warning_type AS warningType,
+            severity,
+            message,
+            metadata_json AS metadataJson,
+            created_at AS createdAt
+           FROM historical_coverage_warnings
+           ORDER BY pipeline_run_id, id`
+        )
+        .all();
+
+  return rows.map((row) => ({
+    createdAt: String(row.createdAt),
+    id: Number(row.id),
+    message: String(row.message),
+    metadata: parseJson(String(row.metadataJson), {}),
+    periodId: String(row.periodId),
+    pipelineRunId: String(row.pipelineRunId),
+    severity: String(row.severity) === "fail" ? "fail" : "warn",
+    source: row.source === null || row.source === undefined ? undefined : (String(row.source) as DeckSource),
+    warningType: String(row.warningType) as HistoricalCoverageWarningType
   }));
 }
 
@@ -1514,6 +1717,10 @@ function parseJsonArray(value: unknown): readonly string[] {
 
 function isCubeCardRole(value: string): value is CubeCardRole {
   return value === "glue" || value === "signpost" || value === "fixing" || value === "support" || value === "curve" || value === "role";
+}
+
+function isHistoricalCoverageWarningType(value: string): value is HistoricalCoverageWarningType {
+  return value === "empty_period" || value === "thin_period" || value === "missing_source_coverage";
 }
 
 function parseJsonObject(value: unknown): Record<string, unknown> {
