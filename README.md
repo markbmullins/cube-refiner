@@ -163,6 +163,15 @@ pnpm cube:generate -- --pipeline-run-id <run-id>
 
 The cube generator stores a cube run, selected cards, roles, and reason fields in SQLite, then exports `data/outputs/cube_360_candidate.csv`.
 
+Validate a generated cube:
+
+```bash
+pnpm cube:validate -- --cube-run-id <cube-run-id>
+pnpm cube:validate -- --cube-run-id <cube-run-id> --min-removal 35 --max-zero-support-cards 25
+```
+
+Validation stores a validation run, aggregate health metrics, per-archetype support counts, warning rows, and zero-support card review rows in SQLite. The CSV at `data/outputs/cube_validation_report.csv` is a reproducible export from the stored validation run.
+
 ## Shared Contracts
 
 The initial shared contracts live in `src/types/contracts.ts` and cover:

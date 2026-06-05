@@ -210,6 +210,32 @@ CREATE INDEX IF NOT EXISTS idx_normalized_deck_cards_card ON normalized_deck_car
 CREATE INDEX IF NOT EXISTS idx_matrix_pipeline_card ON card_archetype_matrix(pipeline_run_id, card_name);
 CREATE INDEX IF NOT EXISTS idx_scores_pipeline_score ON card_scores(pipeline_run_id, cube_score DESC);
 `
+  },
+  {
+    description: "Structured cube validation metrics and card review rows",
+    id: "0002_validation_metric_tables",
+    sql: `
+CREATE TABLE IF NOT EXISTS validation_metrics (
+  validation_run_id TEXT NOT NULL REFERENCES validation_runs(id) ON DELETE CASCADE,
+  metric_key TEXT NOT NULL,
+  label TEXT NOT NULL,
+  value REAL NOT NULL,
+  metadata_json TEXT NOT NULL DEFAULT '{}',
+  PRIMARY KEY (validation_run_id, metric_key)
+);
+
+CREATE TABLE IF NOT EXISTS validation_zero_support_cards (
+  validation_run_id TEXT NOT NULL REFERENCES validation_runs(id) ON DELETE CASCADE,
+  card_name TEXT NOT NULL,
+  section TEXT NOT NULL,
+  position INTEGER NOT NULL,
+  reason TEXT NOT NULL,
+  PRIMARY KEY (validation_run_id, card_name)
+);
+
+CREATE INDEX IF NOT EXISTS idx_validation_metrics_run ON validation_metrics(validation_run_id, metric_key);
+CREATE INDEX IF NOT EXISTS idx_validation_zero_support_run ON validation_zero_support_cards(validation_run_id, position);
+`
   }
 ];
 

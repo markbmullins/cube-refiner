@@ -2,7 +2,7 @@
 
 import { existsSync, rmSync } from "node:fs";
 
-import { generateCandidatePools, generateCube } from "../build/index.js";
+import { generateCandidatePools, generateCube, validateCube } from "../build/index.js";
 import { runCollectors } from "../collectors/index.js";
 import { defaultProjectPaths } from "../config/paths.js";
 import { applyMigrations, openDatabase } from "../db/index.js";
@@ -45,6 +45,7 @@ Usage:
   cube-refiner score:cards [--db path] --pipeline-run-id id [--glue-threshold n] [--signpost-affinity n] [--signpost-exclusivity n] [--signpost-min-decks n]
   cube-refiner candidates:generate [--db path] --pipeline-run-id id [--output-dir path]
   cube-refiner cube:generate [--db path] --pipeline-run-id id [--cube-run-id id] [--output-csv path]
+  cube-refiner cube:validate [--db path] --cube-run-id id [--validation-run-id id] [--output-csv path]
 
 Project paths:
   raw data:        ${defaultProjectPaths.rawDataDir}
@@ -263,6 +264,41 @@ if (command === "cube:generate") {
     console.log(`Generated cube ${summary.cubeRunId} with ${summary.selectedCards} cards.`);
     if (summary.outputCsvPath) {
       console.log(`Cube CSV: ${summary.outputCsvPath}`);
+    }
+  } finally {
+    database.close();
+  }
+  process.exit(0);
+}
+
+if (command === "cube:validate") {
+  const cubeRunId = getOptionValue("--cube-run-id");
+  if (!cubeRunId) {
+    console.error("cube:validate requires --cube-run-id.");
+    process.exit(1);
+  }
+
+  const database = openDatabase({ path: databasePath });
+  try {
+    applyMigrations(database);
+    const summary = validateCube(database, {
+      cubeRunId,
+      maximumSupportPerArchetype: parsePositiveInteger(getOptionValue("--max-support-per-archetype")),
+      maximumZeroSupportCards: parsePositiveInteger(getOptionValue("--max-zero-support-cards")),
+      minimumArchetypeSupport: parsePositiveInteger(getOptionValue("--min-archetype-support")),
+      minimumFixing: parsePositiveInteger(getOptionValue("--min-fixing")),
+      minimumOneDrops: parsePositiveInteger(getOptionValue("--min-one-drops")),
+      minimumRemoval: parsePositiveInteger(getOptionValue("--min-removal")),
+      minimumSupportPerArchetype: parsePositiveInteger(getOptionValue("--min-support-per-archetype")),
+      outputCsvPath: getOptionValue("--output-csv") ?? `${defaultProjectPaths.outputsDir}/cube_validation_report.csv`,
+      targetTolerance: parsePositiveInteger(getOptionValue("--target-tolerance")),
+      validationRunId: getOptionValue("--validation-run-id")
+    });
+    console.log(
+      `Validated cube ${cubeRunId} as ${summary.status}; metrics ${summary.metrics}; warnings ${summary.warnings}; zero-support cards ${summary.zeroSupportCards}.`
+    );
+    if (summary.outputCsvPath) {
+      console.log(`Validation CSV: ${summary.outputCsvPath}`);
     }
   } finally {
     database.close();

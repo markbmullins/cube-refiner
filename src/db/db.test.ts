@@ -6,7 +6,7 @@ import type { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { openDatabase } from "./connection.js";
-import { applyMigrations } from "./migrations.js";
+import { applyMigrations, migrations } from "./migrations.js";
 import {
   listMatrixInputRows,
   upsertArchetypeMapping,
@@ -35,8 +35,8 @@ describe("SQLite persistence", () => {
       .prepare("SELECT COUNT(*) AS count FROM sqlite_master WHERE type = 'table' AND name = 'raw_decks'")
       .get();
 
-    expect(applied).toEqual(["0001_initial_schema"]);
-    expect(Number(migrationRow?.count)).toBe(1);
+    expect(applied).toEqual(migrations.map((migration) => migration.id));
+    expect(Number(migrationRow?.count)).toBe(migrations.length);
     expect(Number(tableRow?.count)).toBe(1);
   });
 

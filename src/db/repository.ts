@@ -158,6 +158,39 @@ export type CubeRunCardInput = {
   readonly reason: string;
 };
 
+export type ValidationRunInput = {
+  readonly id: string;
+  readonly cubeRunId: string;
+  readonly config: unknown;
+  readonly createdAt?: string;
+  readonly totalCards: number;
+  readonly status: "pass" | "warn" | "fail";
+};
+
+export type ValidationWarningInput = {
+  readonly validationRunId: string;
+  readonly level: "pass" | "warn" | "fail";
+  readonly code: string;
+  readonly message: string;
+  readonly metadata?: unknown;
+};
+
+export type ValidationMetricInput = {
+  readonly validationRunId: string;
+  readonly metricKey: string;
+  readonly label: string;
+  readonly value: number;
+  readonly metadata?: unknown;
+};
+
+export type ValidationZeroSupportCardInput = {
+  readonly validationRunId: string;
+  readonly cardName: string;
+  readonly section: string;
+  readonly position: number;
+  readonly reason: string;
+};
+
 export function upsertSourceSnapshot(database: DatabaseSync, input: SourceSnapshotInput): string {
   const id = stableId("source-snapshot", input.source, input.sourceUrl, input.contentHash);
 
@@ -883,6 +916,160 @@ export function listCubeRunCards(database: DatabaseSync, cubeRunId: string): rea
   }));
 }
 
+export function upsertValidationRun(database: DatabaseSync, input: ValidationRunInput): void {
+  database
+    .prepare(
+      `INSERT INTO validation_runs (id, cube_run_id, config_json, created_at, total_cards, status)
+       VALUES (?, ?, ?, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET
+         cube_run_id = excluded.cube_run_id,
+         config_json = excluded.config_json,
+         created_at = excluded.created_at,
+         total_cards = excluded.total_cards,
+         status = excluded.status`
+    )
+    .run(
+      input.id,
+      input.cubeRunId,
+      JSON.stringify(input.config),
+      input.createdAt ?? new Date().toISOString(),
+      input.totalCards,
+      input.status
+    );
+}
+
+export function replaceValidationWarnings(
+  database: DatabaseSync,
+  validationRunId: string,
+  rows: readonly ValidationWarningInput[]
+): void {
+  database.exec("BEGIN;");
+  try {
+    database.prepare("DELETE FROM validation_warnings WHERE validation_run_id = ?").run(validationRunId);
+    const insert = database.prepare(
+      `INSERT INTO validation_warnings (validation_run_id, level, code, message, metadata_json)
+       VALUES (?, ?, ?, ?, ?)`
+    );
+
+    for (const row of rows) {
+      insert.run(row.validationRunId, row.level, row.code, row.message, JSON.stringify(row.metadata ?? {}));
+    }
+
+    database.exec("COMMIT;");
+  } catch (error) {
+    database.exec("ROLLBACK;");
+    throw error;
+  }
+}
+
+export function listValidationWarnings(database: DatabaseSync, validationRunId: string): readonly ValidationWarningInput[] {
+  const rows = database
+    .prepare(
+      `SELECT validation_run_id AS validationRunId, level, code, message, metadata_json AS metadataJson
+       FROM validation_warnings
+       WHERE validation_run_id = ?
+       ORDER BY level DESC, code, message`
+    )
+    .all(validationRunId);
+
+  return rows.map((row) => ({
+    code: String(row.code),
+    level: normalizeWarningLevel(String(row.level)),
+    message: String(row.message),
+    metadata: parseJsonObject(row.metadataJson),
+    validationRunId: String(row.validationRunId)
+  }));
+}
+
+export function replaceValidationMetrics(
+  database: DatabaseSync,
+  validationRunId: string,
+  rows: readonly ValidationMetricInput[]
+): void {
+  database.exec("BEGIN;");
+  try {
+    database.prepare("DELETE FROM validation_metrics WHERE validation_run_id = ?").run(validationRunId);
+    const insert = database.prepare(
+      `INSERT INTO validation_metrics (validation_run_id, metric_key, label, value, metadata_json)
+       VALUES (?, ?, ?, ?, ?)`
+    );
+
+    for (const row of rows) {
+      insert.run(row.validationRunId, row.metricKey, row.label, row.value, JSON.stringify(row.metadata ?? {}));
+    }
+
+    database.exec("COMMIT;");
+  } catch (error) {
+    database.exec("ROLLBACK;");
+    throw error;
+  }
+}
+
+export function listValidationMetrics(database: DatabaseSync, validationRunId: string): readonly ValidationMetricInput[] {
+  const rows = database
+    .prepare(
+      `SELECT validation_run_id AS validationRunId, metric_key AS metricKey, label, value, metadata_json AS metadataJson
+       FROM validation_metrics
+       WHERE validation_run_id = ?
+       ORDER BY metric_key`
+    )
+    .all(validationRunId);
+
+  return rows.map((row) => ({
+    label: String(row.label),
+    metadata: parseJsonObject(row.metadataJson),
+    metricKey: String(row.metricKey),
+    validationRunId: String(row.validationRunId),
+    value: Number(row.value)
+  }));
+}
+
+export function replaceValidationZeroSupportCards(
+  database: DatabaseSync,
+  validationRunId: string,
+  rows: readonly ValidationZeroSupportCardInput[]
+): void {
+  database.exec("BEGIN;");
+  try {
+    database.prepare("DELETE FROM validation_zero_support_cards WHERE validation_run_id = ?").run(validationRunId);
+    const insert = database.prepare(
+      `INSERT INTO validation_zero_support_cards (validation_run_id, card_name, section, position, reason)
+       VALUES (?, ?, ?, ?, ?)`
+    );
+
+    for (const row of rows) {
+      insert.run(row.validationRunId, row.cardName, row.section, row.position, row.reason);
+    }
+
+    database.exec("COMMIT;");
+  } catch (error) {
+    database.exec("ROLLBACK;");
+    throw error;
+  }
+}
+
+export function listValidationZeroSupportCards(
+  database: DatabaseSync,
+  validationRunId: string
+): readonly ValidationZeroSupportCardInput[] {
+  const rows = database
+    .prepare(
+      `SELECT validation_run_id AS validationRunId, card_name AS cardName, section, position, reason
+       FROM validation_zero_support_cards
+       WHERE validation_run_id = ?
+       ORDER BY position, card_name`
+    )
+    .all(validationRunId);
+
+  return rows.map((row) => ({
+    cardName: String(row.cardName),
+    position: Number(row.position),
+    reason: String(row.reason),
+    section: String(row.section),
+    validationRunId: String(row.validationRunId)
+  }));
+}
+
 function replaceRawDeckCards(
   database: DatabaseSync,
   rawDeckId: string,
@@ -950,4 +1137,25 @@ function parseJsonArray(value: unknown): readonly string[] {
 
 function isCubeCardRole(value: string): value is CubeCardRole {
   return value === "glue" || value === "signpost" || value === "fixing" || value === "support" || value === "curve" || value === "role";
+}
+
+function parseJsonObject(value: unknown): Record<string, unknown> {
+  if (typeof value !== "string") {
+    return {};
+  }
+
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    return parsed !== null && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : {};
+  } catch {
+    return {};
+  }
+}
+
+function normalizeWarningLevel(value: string): "pass" | "warn" | "fail" {
+  if (value === "fail" || value === "warn") {
+    return value;
+  }
+
+  return "pass";
 }

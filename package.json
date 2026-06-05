@@ -19,6 +19,7 @@
     "collect:mtgo": "tsx src/cli/index.ts collect:mtgo",
     "collect:mtgtop8": "tsx src/cli/index.ts collect:mtgtop8",
     "cube:generate": "tsx src/cli/index.ts cube:generate",
+    "cube:validate": "tsx src/cli/index.ts cube:validate",
     "dedupe:decks": "tsx src/cli/index.ts dedupe:decks",
     "dev": "tsx src/cli/index.ts",
     "matrix:build": "tsx src/cli/index.ts matrix:build",
