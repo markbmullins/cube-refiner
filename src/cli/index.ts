@@ -1,11 +1,20 @@
 #!/usr/bin/env node
 
-import { existsSync, rmSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, rmSync } from "node:fs";
+import path from "node:path";
 
 import { generateCandidatePools, generateCube, validateCube } from "../build/index.js";
 import { runCollectors } from "../collectors/index.js";
 import { defaultProjectPaths } from "../config/paths.js";
-import { applyMigrations, openDatabase } from "../db/index.js";
+import {
+  applyMigrations,
+  getDatabaseStatus,
+  listConfigProfiles,
+  listManualReviewItems,
+  listOutputArtifacts,
+  openDatabase,
+  runIntegrityCheck
+} from "../db/index.js";
 import {
   dedupeDecks,
   fetchAndImportScryfallDefaultCards,
@@ -35,7 +44,14 @@ Usage:
   cube-refiner pipeline:run [--db path] [--raw-dir path] [--output-dir path] [--skip-collect] [--scryfall-file path] [--fetch-scryfall] [--pipeline-run-id id] [--cube-run-id id]
   cube-refiner db:init [--db path]
   cube-refiner db:migrate [--db path]
-  cube-refiner db:reset [--db path]
+  cube-refiner db:status [--db path] [--json]
+  cube-refiner db:reviews [--db path] [--queue name] [--json]
+  cube-refiner db:artifacts [--db path] [--pipeline-run-id id] [--json]
+  cube-refiner db:configs [--db path] [--json]
+  cube-refiner db:backup [--db path] [--output path]
+  cube-refiner db:check [--db path] [--json]
+  cube-refiner db:vacuum [--db path]
+  cube-refiner db:reset [--db path] --force [--backup path]
   cube-refiner collect:all [--db path] [--raw-dir path] [--refresh]
   cube-refiner collect:mtgtop8 [--db path] [--raw-dir path] [--refresh]
   cube-refiner collect:mtgo [--db path] [--raw-dir path] [--refresh]
@@ -351,10 +367,142 @@ if (command === "db:init" || command === "db:migrate") {
   process.exit(0);
 }
 
+if (command === "db:status") {
+  const database = openDatabase({ path: databasePath });
+  try {
+    applyMigrations(database);
+    const status = getDatabaseStatus(database);
+    if (args.includes("--json")) {
+      console.log(JSON.stringify(status, null, 2));
+    } else {
+      console.log(`Database: ${databasePath}`);
+      console.log(`Migrations: ${status.schemaMigrations.join(", ") || "none"}`);
+      console.log(`Ready for pipeline: ${status.readyForPipeline ? "yes" : "no"}`);
+      console.log(`Pending review items: ${status.pendingReviewItems}`);
+      console.log(`Output artifacts: ${status.outputArtifacts} (${status.staleArtifacts} stale)`);
+      console.log(`Config profiles: ${status.configProfiles}`);
+      if (status.latestPipelineRun) {
+        console.log(`Latest run: ${status.latestPipelineRun.id} (${status.latestPipelineRun.status})`);
+        for (const stage of status.latestPipelineStages) {
+          console.log(`  ${stage.stage}: ${stage.status}, rows=${stage.rowCount}`);
+        }
+      }
+      for (const [table, count] of Object.entries(status.counts)) {
+        console.log(`${table}: ${count}`);
+      }
+    }
+  } finally {
+    database.close();
+  }
+  process.exit(0);
+}
+
+if (command === "db:reviews") {
+  const database = openDatabase({ path: databasePath });
+  try {
+    applyMigrations(database);
+    const items = listManualReviewItems(database, parseReviewQueue(getOptionValue("--queue")));
+    if (args.includes("--json")) {
+      console.log(JSON.stringify(items, null, 2));
+    } else {
+      if (items.length === 0) {
+        console.log("No pending manual review items.");
+      }
+      for (const item of items) {
+        console.log(`${item.queue}: ${item.item} - ${item.detail}`);
+      }
+    }
+  } finally {
+    database.close();
+  }
+  process.exit(0);
+}
+
+if (command === "db:artifacts") {
+  const database = openDatabase({ path: databasePath });
+  try {
+    applyMigrations(database);
+    const artifacts = listOutputArtifacts(database, getOptionValue("--pipeline-run-id"));
+    if (args.includes("--json")) {
+      console.log(JSON.stringify(artifacts, null, 2));
+    } else {
+      for (const artifact of artifacts) {
+        console.log(`${artifact.stage}: ${artifact.path} ${artifact.existsOnDisk ? "" : "(missing)"}`.trim());
+      }
+    }
+  } finally {
+    database.close();
+  }
+  process.exit(0);
+}
+
+if (command === "db:configs") {
+  const database = openDatabase({ path: databasePath });
+  try {
+    applyMigrations(database);
+    const profiles = listConfigProfiles(database);
+    if (args.includes("--json")) {
+      console.log(JSON.stringify(profiles, null, 2));
+    } else {
+      for (const profile of profiles) {
+        console.log(`${profile.name}: ${profile.configHash} updated=${profile.updatedAt}`);
+      }
+    }
+  } finally {
+    database.close();
+  }
+  process.exit(0);
+}
+
+if (command === "db:backup") {
+  const outputPath = getOptionValue("--output") ?? defaultBackupPath(databasePath);
+  backupDatabaseFiles(databasePath, outputPath);
+  console.log(`Database backup: ${outputPath}`);
+  process.exit(0);
+}
+
+if (command === "db:check") {
+  const database = openDatabase({ path: databasePath });
+  try {
+    applyMigrations(database);
+    const results = runIntegrityCheck(database);
+    if (args.includes("--json")) {
+      console.log(JSON.stringify({ results }, null, 2));
+    } else {
+      console.log(results.join("\n"));
+    }
+  } finally {
+    database.close();
+  }
+  process.exit(0);
+}
+
+if (command === "db:vacuum") {
+  const database = openDatabase({ path: databasePath });
+  try {
+    applyMigrations(database);
+    database.exec("VACUUM;");
+    console.log(`Vacuumed database: ${databasePath}`);
+  } finally {
+    database.close();
+  }
+  process.exit(0);
+}
+
 if (command === "db:reset") {
   if (databasePath === ":memory:") {
     console.error("db:reset requires a file-backed database path.");
     process.exit(1);
+  }
+  if (!args.includes("--force")) {
+    console.error("db:reset is destructive; rerun with --force or create a backup first with db:backup.");
+    process.exit(1);
+  }
+
+  const backupPath = getOptionValue("--backup");
+  if (backupPath) {
+    backupDatabaseFiles(databasePath, backupPath);
+    console.log(`Database backup: ${backupPath}`);
   }
 
   if (existsSync(databasePath)) {
@@ -418,4 +566,47 @@ function parsePositiveInteger(value: string | undefined): number | undefined {
 function parseNumberOption(value: string | undefined): number | undefined {
   const parsed = value ? Number(value) : undefined;
   return parsed === undefined || Number.isNaN(parsed) ? undefined : parsed;
+}
+
+function parseReviewQueue(value: string | undefined): Parameters<typeof listManualReviewItems>[1] {
+  if (
+    value === "unresolved_cards" ||
+    value === "archetype_gaps" ||
+    value === "dedupe_ambiguities" ||
+    value === "parasitic_cards" ||
+    value === "validation_warnings" ||
+    value === "zero_support_cards"
+  ) {
+    return value;
+  }
+
+  return undefined;
+}
+
+function defaultBackupPath(filePath: string): string {
+  if (filePath === ":memory:") {
+    return path.join(process.cwd(), `cube-refiner-${Date.now()}.sqlite.bak`);
+  }
+
+  return `${filePath}.${new Date().toISOString().replace(/[:.]/g, "-")}.bak`;
+}
+
+function backupDatabaseFiles(filePath: string, outputPath: string): void {
+  if (filePath === ":memory:") {
+    console.error("Database backup requires a file-backed database path.");
+    process.exit(1);
+  }
+  if (!existsSync(filePath)) {
+    console.error(`Database does not exist: ${filePath}`);
+    process.exit(1);
+  }
+
+  mkdirSync(path.dirname(outputPath), { recursive: true });
+  copyFileSync(filePath, outputPath);
+  for (const suffix of ["-shm", "-wal"]) {
+    const sidecar = `${filePath}${suffix}`;
+    if (existsSync(sidecar)) {
+      copyFileSync(sidecar, `${outputPath}${suffix}`);
+    }
+  }
 }

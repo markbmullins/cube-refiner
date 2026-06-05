@@ -59,9 +59,18 @@ pnpm dev -- help
 ```bash
 pnpm dev -- db:init
 pnpm dev -- db:migrate
-pnpm dev -- db:reset
+pnpm dev -- db:status
+pnpm dev -- db:reviews
+pnpm dev -- db:artifacts
+pnpm dev -- db:configs
+pnpm dev -- db:backup --output data/cube-refiner.sqlite.bak
+pnpm dev -- db:check
+pnpm dev -- db:vacuum
+pnpm dev -- db:reset --force --backup data/cube-refiner.sqlite.bak
 pnpm dev -- db:init --db data/cube-refiner.sqlite
 ```
+
+`db:status` summarizes migrations, table counts, pending review items, latest pipeline stages, saved config profiles, artifact counts, and stale artifact paths. `db:reviews` lists unresolved cards, archetype mapping gaps, near-duplicate review clusters, parasitic-card candidates, validation warnings, and zero-support cube cards without opening CSVs by hand. Destructive reset commands require `--force`; use `db:backup` or `db:reset --backup <path>` before replacing useful local state.
 
 ## End-to-End Pipeline
 

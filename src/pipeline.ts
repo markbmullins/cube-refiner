@@ -322,13 +322,21 @@ function registerArtifact(database: DatabaseSync, pipelineRunId: string, filePat
 
 function stageForArtifact(filePath: string): string {
   const basename = path.basename(filePath);
+  const candidateOutputs = new Set([
+    "auto_includes.csv",
+    "glue_cards.csv",
+    "signpost_cards.csv",
+    "parasitic_review.csv",
+    "sideboard_cards.csv",
+    "lands.csv",
+    "removal.csv",
+    "threats.csv"
+  ]);
   if (basename.includes("cube_cobra")) return "export:cube-cobra";
   if (basename.includes("validation")) return "cube:validate";
   if (basename.includes("cube_360")) return "cube:generate";
-  if (basename.includes("candidate") || basename.includes("glue") || basename.includes("parasitic") || basename.includes("sideboard")) {
-    return "candidates:generate";
-  }
-  if (basename.includes("score") || basename.includes("ranked")) return "score:cards";
+  if (candidateOutputs.has(basename)) return "candidates:generate";
+  if (basename.includes("score") || basename.includes("ranked") || basename.includes("signpost_candidates")) return "score:cards";
   if (basename.includes("matrix") || basename.includes("archetypes_summary")) return "matrix:build";
   if (basename.includes("dedupe")) return "dedupe:decks";
   if (basename.includes("archetype_audit")) return "normalize:archetypes";
