@@ -5,22 +5,28 @@ import type { DatabaseSync } from "node:sqlite";
 
 import {
   listCubeRunCards,
+  listArchetypeReconstructionTargets,
+  listHistoricalCardScoreRows,
   listPersistedCandidatePoolCards,
   listPersistedCards,
   replaceCubeRunCards,
   upsertCubeRun
 } from "../db/index.js";
 import type { CandidatePoolCardInput, CubeRunCardInput, PersistedCardRecord } from "../db/repository.js";
-import type { CandidatePool, CubeCardRole } from "../types/contracts.js";
+import type { CandidatePool, CubeCardRole, HistoricalCardRole, HistoricalCardScoreRow, ArchetypeReconstructionTargetRow } from "../types/contracts.js";
 
 export type CubeSection = "White" | "Blue" | "Black" | "Red" | "Green" | "Gold" | "Colorless" | "Lands";
 
 export type CubeGeneratorConfig = {
+  readonly mode: "aggregate" | "historical";
   readonly targets: Readonly<Record<CubeSection, number>>;
   readonly totalCards: number;
   readonly minimumRemoval: number;
   readonly minimumCounterspells: number;
   readonly minimumSweepers: number;
+  readonly minimumFormatPillars: number;
+  readonly minimumArchetypeIcons: number;
+  readonly minimumRepresentedPeriods: number;
   readonly counterspellNamePatterns: readonly string[];
   readonly sweeperNamePatterns: readonly string[];
 };
@@ -43,6 +49,10 @@ type CubeCandidateCard = {
   readonly pools: readonly CandidatePool[];
   readonly roles: readonly CubeCardRole[];
   readonly score: number;
+  readonly historicalRole?: HistoricalCardRole;
+  readonly historicalScore?: number;
+  readonly reconstructionPeriods: readonly string[];
+  readonly reconstructionRoles: readonly string[];
   readonly explanation: string;
   readonly section: CubeSection;
 };
@@ -60,9 +70,13 @@ const defaultTargets: Readonly<Record<CubeSection, number>> = {
 
 const defaultConfig: CubeGeneratorConfig = {
   counterspellNamePatterns: ["counterspell", "mana leak", "remand", "cryptic command", "spell pierce", "dispel"],
+  minimumArchetypeIcons: 24,
   minimumCounterspells: 12,
+  minimumFormatPillars: 24,
+  minimumRepresentedPeriods: 12,
   minimumRemoval: 35,
   minimumSweepers: 6,
+  mode: "aggregate",
   sweeperNamePatterns: ["wrath", "damnation", "supreme verdict", "anger of the gods", "engineered explosives"],
   targets: defaultTargets,
   totalCards: 360
@@ -73,9 +87,12 @@ export function generateCube(database: DatabaseSync, options: GenerateCubeOption
   const cubeRunId = options.cubeRunId ?? randomUUID();
   const candidates = buildCubeCandidates(
     listPersistedCandidatePoolCards(database, options.pipelineRunId),
-    listPersistedCards(database)
+    listPersistedCards(database),
+    config.mode === "historical" ? listHistoricalCardScoreRows(database, options.pipelineRunId) : [],
+    config.mode === "historical" ? listArchetypeReconstructionTargets(database, options.pipelineRunId) : []
   );
-  const selected = selectCubeCards(candidates, config).map((card, index) => ({
+  const selectedCards = config.mode === "historical" ? selectHistoricalCubeCards(candidates, config) : selectCubeCards(candidates, config);
+  const selected = selectedCards.map((card, index) => ({
     cardName: card.cardName,
     cubeRunId,
     position: index,
@@ -134,6 +151,64 @@ export function selectCubeCards(
   return [...selected.values()];
 }
 
+export function selectHistoricalCubeCards(
+  candidates: readonly CubeCandidateCard[],
+  config: CubeGeneratorConfig = defaultConfig
+): readonly CubeCandidateCard[] {
+  const selected = new Map<string, CubeCandidateCard>();
+  const counts = initialSectionCounts();
+
+  const addHistoricalMinimum = (
+    minimum: number,
+    reason: string,
+    predicate: (candidate: CubeCandidateCard) => boolean
+  ) => {
+    let current = [...selected.values()].filter(predicate).length;
+    for (const candidate of sortedHistoricalCandidates(candidates).filter(predicate)) {
+      if (selected.size >= config.totalCards || current >= minimum) {
+        return;
+      }
+      const sizeBefore = selected.size;
+      addCandidate(selected, counts, candidate, config, reason);
+      if (selected.size > sizeBefore) {
+        current += 1;
+      }
+    }
+  };
+
+  addHistoricalMinimum(config.minimumFormatPillars, "historical pillar", (candidate) => candidate.historicalRole === "format_pillar");
+  addHistoricalMinimum(config.minimumArchetypeIcons, "historical archetype icon", (candidate) => candidate.historicalRole === "archetype_icon");
+
+  const representedPeriods = new Set<string>([...selected.values()].flatMap((candidate) => candidate.reconstructionPeriods));
+  for (const candidate of sortedHistoricalCandidates(candidates).filter((entry) => entry.reconstructionPeriods.length > 0)) {
+    if (selected.size >= config.totalCards || representedPeriods.size >= config.minimumRepresentedPeriods) {
+      break;
+    }
+    if (candidate.reconstructionPeriods.some((periodId) => !representedPeriods.has(periodId))) {
+      addCandidate(selected, counts, candidate, config, "set-release coverage");
+      for (const periodId of candidate.reconstructionPeriods) {
+        representedPeriods.add(periodId);
+      }
+    }
+  }
+
+  for (const candidate of sortedHistoricalCandidates(candidates).filter((entry) => entry.reconstructionRoles.includes("glue"))) {
+    if (selected.size >= config.totalCards) {
+      break;
+    }
+    addCandidate(selected, counts, candidate, config, "shared ecosystem glue");
+  }
+
+  for (const candidate of selectCubeCards(candidates, config)) {
+    if (selected.size >= config.totalCards) {
+      break;
+    }
+    addCandidate(selected, counts, candidate, config, "historical fallback");
+  }
+
+  return [...selected.values()];
+}
+
 function addMinimum(
   minimum: number,
   reason: string,
@@ -159,9 +234,16 @@ function addMinimum(
 
 export function buildCubeCandidates(
   rows: readonly CandidatePoolCardInput[],
-  cards: readonly PersistedCardRecord[]
+  cards: readonly PersistedCardRecord[],
+  historicalScores: readonly HistoricalCardScoreRow[] = [],
+  reconstructionTargets: readonly ArchetypeReconstructionTargetRow[] = []
 ): readonly CubeCandidateCard[] {
   const cardsByName = new Map(cards.map((card) => [card.canonicalName, card]));
+  const historicalScoresByName = new Map(historicalScores.map((score) => [score.cardName, score]));
+  const targetsByName = new Map<string, ArchetypeReconstructionTargetRow[]>();
+  for (const target of reconstructionTargets) {
+    targetsByName.set(target.cardName, [...(targetsByName.get(target.cardName) ?? []), target]);
+  }
   const rowsByCard = new Map<string, CandidatePoolCardInput[]>();
 
   for (const row of rows) {
@@ -173,19 +255,27 @@ export function buildCubeCandidates(
     const pools = unique(candidateRows.map((row) => row.pool));
     const roles = unique(candidateRows.flatMap((row) => row.roles));
     const best = [...candidateRows].sort((a, b) => b.score - a.score || a.pool.localeCompare(b.pool))[0];
+    const historicalScore = historicalScoresByName.get(cardName);
+    const targets = targetsByName.get(cardName) ?? [];
 
     return {
       card,
       cardName,
       explanation: [
+        historicalScore ? `historical=${historicalScore.historicalRole}:${formatNumber(historicalScore.modernLegacyScore)}` : "",
+        targets.length > 0 ? `reconstruction=${unique(targets.map((target) => `${target.archetypeFamily}@${target.periodId}:${target.targetRole}`)).join("|")}` : "",
         `selected as ${best?.pool ?? "candidate"}`,
         `pools=${pools.join("|")}`,
         `roles=${roles.join("|") || "none"}`,
         best?.explanation ?? ""
-      ].join(" "),
+      ].filter((part) => part.length > 0).join(" "),
+      historicalRole: historicalScore?.historicalRole,
+      historicalScore: historicalScore?.modernLegacyScore,
       pools,
+      reconstructionPeriods: unique(targets.map((target) => target.periodId)),
+      reconstructionRoles: unique(targets.map((target) => target.targetRole)),
       roles,
-      score: Math.max(...candidateRows.map((row) => row.score)),
+      score: Math.max(...candidateRows.map((row) => row.score), historicalScore?.modernLegacyScore ?? 0),
       section: classifySection(card, pools)
     };
   });
@@ -214,6 +304,16 @@ function addCandidate(
 
 function sortedCandidates(candidates: readonly CubeCandidateCard[]): readonly CubeCandidateCard[] {
   return [...candidates].sort((a, b) => b.score - a.score || a.section.localeCompare(b.section) || a.cardName.localeCompare(b.cardName));
+}
+
+function sortedHistoricalCandidates(candidates: readonly CubeCandidateCard[]): readonly CubeCandidateCard[] {
+  return [...candidates].sort(
+    (a, b) =>
+      (b.historicalScore ?? 0) - (a.historicalScore ?? 0) ||
+      b.score - a.score ||
+      b.reconstructionPeriods.length - a.reconstructionPeriods.length ||
+      a.cardName.localeCompare(b.cardName)
+  );
 }
 
 function classifySection(card: PersistedCardRecord | undefined, pools: readonly CandidatePool[]): CubeSection {
@@ -277,13 +377,21 @@ function mergeConfig(options: GenerateCubeOptions): CubeGeneratorConfig {
 
   return {
     counterspellNamePatterns: options.counterspellNamePatterns ?? defaultConfig.counterspellNamePatterns,
+    minimumArchetypeIcons: options.minimumArchetypeIcons ?? defaultConfig.minimumArchetypeIcons,
     minimumCounterspells: options.minimumCounterspells ?? defaultConfig.minimumCounterspells,
+    minimumFormatPillars: options.minimumFormatPillars ?? defaultConfig.minimumFormatPillars,
+    minimumRepresentedPeriods: options.minimumRepresentedPeriods ?? defaultConfig.minimumRepresentedPeriods,
     minimumRemoval: options.minimumRemoval ?? defaultConfig.minimumRemoval,
     minimumSweepers: options.minimumSweepers ?? defaultConfig.minimumSweepers,
+    mode: options.mode ?? defaultConfig.mode,
     sweeperNamePatterns: options.sweeperNamePatterns ?? defaultConfig.sweeperNamePatterns,
     targets,
     totalCards: options.totalCards ?? Object.values(targets).reduce((total, value) => total + value, 0)
   };
+}
+
+function formatNumber(value: number): string {
+  return Number.isInteger(value) ? String(value) : value.toFixed(6).replace(/0+$/g, "").replace(/\.$/, "");
 }
 
 function matchesName(candidate: CubeCandidateCard, patterns: readonly string[]): boolean {

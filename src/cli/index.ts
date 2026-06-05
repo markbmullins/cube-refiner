@@ -85,7 +85,7 @@ Usage:
   cube-refiner score:cards [--db path] --pipeline-run-id id [--glue-threshold n] [--signpost-affinity n] [--signpost-exclusivity n] [--signpost-min-decks n]
   cube-refiner score:historical [--db path] --pipeline-run-id id [--aggregate-pipeline-run-id id] [--era-share n] [--pillar-longevity n] [--pillar-peak n] [--icon-peak n] [--flash-peak n] [--flash-max-longevity n] [--weight-glue n] [--weight-longevity n] [--weight-peak n] [--weight-archetype n]
   cube-refiner candidates:generate [--db path] --pipeline-run-id id [--output-dir path]
-  cube-refiner cube:generate [--db path] --pipeline-run-id id [--cube-run-id id] [--output-csv path]
+  cube-refiner cube:generate [--db path] --pipeline-run-id id [--cube-run-id id] [--output-csv path] [--mode aggregate|historical] [--min-format-pillars n] [--min-archetype-icons n] [--min-periods n]
   cube-refiner cube:reconstruct [--db path] --cube-run-id id --pipeline-run-id id [--reconstruction-csv path] [--era-coverage-csv path] [--ecosystem-csv path]
   cube-refiner cube:validate [--db path] --cube-run-id id [--validation-run-id id] [--output-csv path]
 
@@ -487,6 +487,10 @@ if (command === "cube:generate") {
     applyMigrations(database);
     const summary = generateCube(database, {
       cubeRunId: getOptionValue("--cube-run-id"),
+      minimumArchetypeIcons: parsePositiveInteger(getOptionValue("--min-archetype-icons")),
+      minimumFormatPillars: parsePositiveInteger(getOptionValue("--min-format-pillars")),
+      minimumRepresentedPeriods: parsePositiveInteger(getOptionValue("--min-periods")),
+      mode: parseCubeMode(getOptionValue("--mode")),
       outputCsvPath: getOptionValue("--output-csv") ?? `${defaultProjectPaths.outputsDir}/cube_360_candidate.csv`,
       pipelineRunId,
       totalCards: parsePositiveInteger(getOptionValue("--total-cards"))
@@ -781,6 +785,18 @@ function parsePositiveInteger(value: string | undefined): number | undefined {
 function parseNumberOption(value: string | undefined): number | undefined {
   const parsed = value ? Number(value) : undefined;
   return parsed === undefined || Number.isNaN(parsed) ? undefined : parsed;
+}
+
+function parseCubeMode(value: string | undefined): "aggregate" | "historical" | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (value === "aggregate" || value === "historical") {
+    return value;
+  }
+
+  console.error("cube:generate --mode must be aggregate or historical.");
+  process.exit(1);
 }
 
 function parseReviewQueue(value: string | undefined): Parameters<typeof listManualReviewItems>[1] {

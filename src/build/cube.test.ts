@@ -12,7 +12,7 @@ import {
   upsertCard,
   upsertPipelineRun
 } from "../db/index.js";
-import { buildCubeCandidates, generateCube, selectCubeCards } from "./cube.js";
+import { buildCubeCandidates, generateCube, selectCubeCards, selectHistoricalCubeCards } from "./cube.js";
 
 let database: DatabaseSync | undefined;
 
@@ -40,9 +40,13 @@ describe("cube generator", () => {
 
     const selected = selectCubeCards(candidates, {
       counterspellNamePatterns: [],
+      minimumArchetypeIcons: 0,
       minimumCounterspells: 0,
+      minimumFormatPillars: 0,
+      minimumRepresentedPeriods: 0,
       minimumRemoval: 0,
       minimumSweepers: 0,
+      mode: "aggregate",
       sweeperNamePatterns: [],
       targets: {
         Black: 0,
@@ -64,6 +68,56 @@ describe("cube generator", () => {
       "Tarmogoyf"
     ]);
     expect(selected[0]?.explanation).toContain("fixing:");
+  });
+
+  it("historical mode includes an era icon that greatest-hits ordering would miss", () => {
+    const candidates = buildCubeCandidates(
+      [
+        candidate("Generic Staple", "threats", 0.99, ["role"]),
+        candidate("Lightning Bolt", "glue_cards", 0.7, ["glue"]),
+        candidate("Siege Rhino", "signpost_cards", 0.2, ["signpost"])
+      ],
+      [
+        card("Generic Staple", "Creature", 2, ["G"]),
+        card("Lightning Bolt", "Instant", 1, ["R"]),
+        card("Siege Rhino", "Creature", 4, ["W", "B", "G"])
+      ],
+      [
+        historicalScore("Lightning Bolt", "format_pillar", 0.9),
+        historicalScore("Siege Rhino", "archetype_icon", 0.8),
+        historicalScore("Generic Staple", "role_player", 0.1)
+      ],
+      [
+        reconstructionTarget("Siege Rhino", "p-khans", "Abzan", "core"),
+        reconstructionTarget("Lightning Bolt", "p-modern", "Burn", "glue")
+      ]
+    );
+
+    const selected = selectHistoricalCubeCards(candidates, {
+      counterspellNamePatterns: [],
+      minimumArchetypeIcons: 1,
+      minimumCounterspells: 0,
+      minimumFormatPillars: 1,
+      minimumRepresentedPeriods: 1,
+      minimumRemoval: 0,
+      minimumSweepers: 0,
+      mode: "historical",
+      sweeperNamePatterns: [],
+      targets: {
+        Black: 0,
+        Blue: 0,
+        Colorless: 0,
+        Gold: 1,
+        Green: 1,
+        Lands: 0,
+        Red: 1,
+        White: 0
+      },
+      totalCards: 2
+    });
+
+    expect(selected.map((row) => row.cardName)).toContain("Siege Rhino");
+    expect(selected.find((row) => row.cardName === "Siege Rhino")?.explanation).toContain("historical archetype icon");
   });
 
   it("persists a cube run and exports cube_360_candidate CSV", () => {
@@ -173,5 +227,38 @@ function card(
     colors,
     manaValue,
     typeLine
+  };
+}
+
+function historicalScore(cardName: string, historicalRole: "format_pillar" | "archetype_icon" | "role_player", score: number) {
+  return {
+    archetypeImportanceScore: 1,
+    cardName,
+    config: {},
+    eraScore: 1,
+    explanation: `${cardName} historical`,
+    glueScore: 0,
+    historicalRole,
+    longevityScore: score,
+    modernLegacyScore: score,
+    peakScore: score,
+    periodVariance: 0,
+    pipelineRunId: "cube-test-run"
+  };
+}
+
+function reconstructionTarget(
+  cardName: string,
+  periodId: string,
+  archetypeFamily: string,
+  targetRole: "core" | "glue"
+) {
+  return {
+    archetypeFamily,
+    cardName,
+    importance: 1,
+    periodId,
+    pipelineRunId: "cube-test-run",
+    targetRole
   };
 }

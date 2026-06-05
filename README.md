@@ -246,9 +246,12 @@ Generate the constrained first-pass 360-card cube:
 
 ```bash
 pnpm cube:generate -- --pipeline-run-id <run-id>
+pnpm cube:generate -- --pipeline-run-id <run-id> --mode historical --min-format-pillars 24 --min-archetype-icons 24 --min-periods 12
 ```
 
 The cube generator stores a cube run, selected cards, roles, and reason fields in SQLite, then exports `data/outputs/cube_360_candidate.csv`.
+
+Historical mode uses persisted `historical_card_scores` and reconstruction targets when available. It prioritizes format pillars, archetype icons, set-release coverage, and shared ecosystem glue before falling back to the aggregate cube constraints, and selected-card reasons include the historical role and reconstruction evidence.
 
 Measure historical archetype reconstruction for a generated cube:
 
