@@ -120,6 +120,15 @@ pnpm normalize:archetypes -- --mapping-file data/archetype-mappings.json --fail-
 
 Unmapped or ambiguous labels are persisted in SQLite for review and written to `data/outputs/archetype_audit.csv`.
 
+Deduplication computes deterministic mainboard fingerprints, assigns exact duplicate and near-duplicate clusters, persists deck weights in SQLite, and writes a review report:
+
+```bash
+pnpm dedupe:decks
+pnpm dedupe:decks -- --near-overlap 55 --report-csv data/outputs/dedupe_report.csv
+```
+
+Exact duplicate copies are weighted to `0` after the deterministic representative. Near duplicates in the same archetype family and month are downweighted rather than removed.
+
 ## Shared Contracts
 
 The initial shared contracts live in `src/types/contracts.ts` and cover:

@@ -6,6 +6,7 @@ import { runCollectors } from "../collectors/index.js";
 import { defaultProjectPaths } from "../config/paths.js";
 import { applyMigrations, openDatabase } from "../db/index.js";
 import {
+  dedupeDecks,
   fetchAndImportScryfallDefaultCards,
   importScryfallCardsFromFile,
   normalizeArchetypes,
@@ -37,6 +38,7 @@ Usage:
   cube-refiner collect:mtggoldfish [--db path] [--raw-dir path] [--refresh] [--events ids-or-urls]
   cube-refiner normalize:cards [--db path] [--scryfall-file path] [--fetch-scryfall] [--audit-csv path] [--fail-on-unknown]
   cube-refiner normalize:archetypes [--db path] [--mapping-file path] [--audit-csv path] [--fail-on-unmapped]
+  cube-refiner dedupe:decks [--db path] [--report-csv path] [--near-overlap count]
 
 Project paths:
   raw data:        ${defaultProjectPaths.rawDataDir}
@@ -131,6 +133,26 @@ if (command === "normalize:archetypes") {
   process.exit(0);
 }
 
+if (command === "dedupe:decks") {
+  const database = openDatabase({ path: databasePath });
+  try {
+    applyMigrations(database);
+    const summary = dedupeDecks(database, {
+      nearOverlapThreshold: parsePositiveInteger(getOptionValue("--near-overlap")),
+      reportCsvPath: getOptionValue("--report-csv") ?? `${defaultProjectPaths.outputsDir}/dedupe_report.csv`
+    });
+    console.log(
+      `Weighted ${summary.weightedDecks} decks; exact clusters ${summary.exactClusters}; near clusters ${summary.nearClusters}.`
+    );
+    if (summary.reportCsvPath) {
+      console.log(`Dedupe report CSV: ${summary.reportCsvPath}`);
+    }
+  } finally {
+    database.close();
+  }
+  process.exit(0);
+}
+
 if (command === "db:init" || command === "db:migrate") {
   const database = openDatabase({ path: databasePath });
   try {
@@ -200,4 +222,9 @@ function collectorSourcesForCommand(value: string): readonly DeckSource[] | unde
   }
 
   return undefined;
+}
+
+function parsePositiveInteger(value: string | undefined): number | undefined {
+  const parsed = value ? Number(value) : undefined;
+  return parsed && Number.isInteger(parsed) && parsed > 0 ? parsed : undefined;
 }

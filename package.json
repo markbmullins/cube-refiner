@@ -17,6 +17,7 @@
     "collect:mtggoldfish": "tsx src/cli/index.ts collect:mtggoldfish",
     "collect:mtgo": "tsx src/cli/index.ts collect:mtgo",
     "collect:mtgtop8": "tsx src/cli/index.ts collect:mtgtop8",
+    "dedupe:decks": "tsx src/cli/index.ts dedupe:decks",
     "dev": "tsx src/cli/index.ts",
     "normalize:archetypes": "tsx src/cli/index.ts normalize:archetypes",
     "normalize:cards": "tsx src/cli/index.ts normalize:cards",

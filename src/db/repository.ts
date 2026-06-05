@@ -78,6 +78,30 @@ export type NormalizedDeckArchetypeRecord = {
   readonly archetypeFamily: string;
 };
 
+export type NormalizedDeckDedupeRecord = {
+  readonly deckId: string;
+  readonly eventDate: string;
+  readonly archetypeFamily: string;
+  readonly fingerprint: string;
+  readonly mainboard: readonly DeckCard[];
+};
+
+export type DedupeClusterInput = {
+  readonly clusterId: string;
+  readonly strategy: "exact" | "near";
+  readonly archetypeFamily?: string;
+  readonly eventMonth?: string;
+  readonly explanation: string;
+};
+
+export type DeckWeightInput = {
+  readonly deckId: string;
+  readonly exactDuplicateClusterId?: string;
+  readonly nearDuplicateClusterId?: string;
+  readonly weight: number;
+  readonly explanation: string;
+};
+
 export function upsertSourceSnapshot(database: DatabaseSync, input: SourceSnapshotInput): string {
   const id = stableId("source-snapshot", input.source, input.sourceUrl, input.contentHash);
 
@@ -384,6 +408,94 @@ export function updateNormalizedDeckArchetype(
        WHERE deck_id = ?`
     )
     .run(input.archetype, input.archetypeFamily, new Date().toISOString(), input.deckId);
+}
+
+export function listNormalizedDecksForDedupe(database: DatabaseSync): readonly NormalizedDeckDedupeRecord[] {
+  const decks = database
+    .prepare(
+      `SELECT deck_id AS deckId, event_date AS eventDate, archetype_family AS archetypeFamily, fingerprint
+       FROM normalized_decks
+       ORDER BY event_date, archetype_family, deck_id`
+    )
+    .all();
+  const cardRows = database
+    .prepare(
+      `SELECT deck_id AS deckId, card_name AS cardName, copies
+       FROM normalized_deck_cards
+       WHERE zone = 'mainboard'
+       ORDER BY deck_id, position`
+    )
+    .all();
+  const cardsByDeckId = new Map<string, DeckCard[]>();
+
+  for (const row of cardRows) {
+    const deckId = String(row.deckId);
+    cardsByDeckId.set(deckId, [
+      ...(cardsByDeckId.get(deckId) ?? []),
+      { copies: Number(row.copies), name: String(row.cardName) }
+    ]);
+  }
+
+  return decks.map((row) => ({
+    archetypeFamily: String(row.archetypeFamily),
+    deckId: String(row.deckId),
+    eventDate: String(row.eventDate),
+    fingerprint: String(row.fingerprint),
+    mainboard: cardsByDeckId.get(String(row.deckId)) ?? []
+  }));
+}
+
+export function updateNormalizedDeckFingerprint(database: DatabaseSync, deckId: string, fingerprint: string): void {
+  database
+    .prepare("UPDATE normalized_decks SET fingerprint = ?, updated_at = ? WHERE deck_id = ?")
+    .run(fingerprint, new Date().toISOString(), deckId);
+}
+
+export function upsertDedupeCluster(database: DatabaseSync, input: DedupeClusterInput): void {
+  database
+    .prepare(
+      `INSERT INTO dedupe_clusters (
+        cluster_id, strategy, archetype_family, event_month, explanation
+      )
+      VALUES (?, ?, ?, ?, ?)
+      ON CONFLICT(cluster_id) DO UPDATE SET
+        strategy = excluded.strategy,
+        archetype_family = excluded.archetype_family,
+        event_month = excluded.event_month,
+        explanation = excluded.explanation`
+    )
+    .run(
+      input.clusterId,
+      input.strategy,
+      input.archetypeFamily ?? null,
+      input.eventMonth ?? null,
+      input.explanation
+    );
+}
+
+export function upsertDeckWeight(database: DatabaseSync, input: DeckWeightInput): void {
+  database
+    .prepare(
+      `INSERT INTO deck_weights (
+        deck_id, exact_duplicate_cluster_id, near_duplicate_cluster_id,
+        weight, explanation, updated_at
+      )
+      VALUES (?, ?, ?, ?, ?, ?)
+      ON CONFLICT(deck_id) DO UPDATE SET
+        exact_duplicate_cluster_id = excluded.exact_duplicate_cluster_id,
+        near_duplicate_cluster_id = excluded.near_duplicate_cluster_id,
+        weight = excluded.weight,
+        explanation = excluded.explanation,
+        updated_at = excluded.updated_at`
+    )
+    .run(
+      input.deckId,
+      input.exactDuplicateClusterId ?? null,
+      input.nearDuplicateClusterId ?? null,
+      input.weight,
+      input.explanation,
+      new Date().toISOString()
+    );
 }
 
 export function listMatrixInputRows(database: DatabaseSync): readonly MatrixInputRow[] {
