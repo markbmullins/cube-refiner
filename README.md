@@ -128,6 +128,9 @@ Major outputs are written to `data/outputs/` by default:
 - `glue_cards.csv`
 - `parasitic_review.csv`
 - `cube_360_candidate.csv`
+- `archetype_reconstruction.csv`
+- `era_coverage.csv`
+- `ecosystem_diversity_report.csv`
 - `cube_validation_report.csv`
 - `cube_cobra_import.txt`
 - `historical_source_coverage.csv`
@@ -246,6 +249,14 @@ pnpm cube:generate -- --pipeline-run-id <run-id>
 ```
 
 The cube generator stores a cube run, selected cards, roles, and reason fields in SQLite, then exports `data/outputs/cube_360_candidate.csv`.
+
+Measure historical archetype reconstruction for a generated cube:
+
+```bash
+pnpm dev -- cube:reconstruct --cube-run-id <cube-run-id> --pipeline-run-id <period-matrix-run-id>
+```
+
+Reconstruction derives archetype-period targets from `card_period_matrix`, evaluates which core, support, glue, signpost, and optional package cards made the cube, and writes `archetype_reconstruction.csv`, `era_coverage.csv`, and `ecosystem_diversity_report.csv`. Missing core cards are persisted as warnings on the affected set-release period rows.
 
 Validate a generated cube:
 

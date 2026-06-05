@@ -4,8 +4,10 @@ import type { DatabaseSync } from "node:sqlite";
 import type {
   CandidatePool,
   ArchetypePeriodSummaryRow,
+  ArchetypeReconstructionTargetRow,
   CardScoreRow,
   CardPeriodMatrixRow,
+  CubeArchetypeReconstructionRow,
   CubeCardRole,
   DeckCard,
   DeckSource,
@@ -15,6 +17,7 @@ import type {
   HistoricalCardScoreRow,
   HistoricalSourceCoverageRow,
   HistoricalSourceCoverageStatus,
+  EcosystemDiversitySummaryRow,
   MetaPeriod,
   MetagamePeriodAssignmentReview,
   MetagamePeriodModel,
@@ -1545,6 +1548,119 @@ export function listHistoricalCardScoreRows(
     periodVariance: Number(row.period_variance),
     pipelineRunId: String(row.pipeline_run_id)
   }));
+}
+
+export function replaceArchetypeReconstructionTargets(
+  database: DatabaseSync,
+  pipelineRunId: string,
+  rows: readonly ArchetypeReconstructionTargetRow[]
+): void {
+  database.exec("BEGIN;");
+  try {
+    database.prepare("DELETE FROM archetype_reconstruction_targets WHERE pipeline_run_id = ?").run(pipelineRunId);
+    const insert = database.prepare(
+      `INSERT INTO archetype_reconstruction_targets (
+        pipeline_run_id, period_id, archetype_family, card_name, target_role, importance
+      )
+      VALUES (?, ?, ?, ?, ?, ?)`
+    );
+    for (const row of rows) {
+      insert.run(row.pipelineRunId, row.periodId, row.archetypeFamily, row.cardName, row.targetRole, row.importance);
+    }
+    database.exec("COMMIT;");
+  } catch (error) {
+    database.exec("ROLLBACK;");
+    throw error;
+  }
+}
+
+export function listArchetypeReconstructionTargets(
+  database: DatabaseSync,
+  pipelineRunId: string
+): readonly ArchetypeReconstructionTargetRow[] {
+  const rows = database
+    .prepare(
+      `SELECT
+        pipeline_run_id AS pipelineRunId,
+        period_id AS periodId,
+        archetype_family AS archetypeFamily,
+        card_name AS cardName,
+        target_role AS targetRole,
+        importance
+       FROM archetype_reconstruction_targets
+       WHERE pipeline_run_id = ?
+       ORDER BY period_id, archetype_family, importance DESC, card_name`
+    )
+    .all(pipelineRunId);
+
+  return rows.map((row) => ({
+    archetypeFamily: String(row.archetypeFamily),
+    cardName: String(row.cardName),
+    importance: Number(row.importance),
+    periodId: String(row.periodId),
+    pipelineRunId: String(row.pipelineRunId),
+    targetRole: String(row.targetRole) as ArchetypeReconstructionTargetRow["targetRole"]
+  }));
+}
+
+export function replaceCubeArchetypeReconstructionRows(
+  database: DatabaseSync,
+  cubeRunId: string,
+  pipelineRunId: string,
+  rows: readonly CubeArchetypeReconstructionRow[],
+  summary: EcosystemDiversitySummaryRow
+): void {
+  database.exec("BEGIN;");
+  try {
+    database.prepare("DELETE FROM cube_archetype_reconstruction WHERE cube_run_id = ? AND pipeline_run_id = ?").run(cubeRunId, pipelineRunId);
+    database.prepare("DELETE FROM ecosystem_diversity_summaries WHERE cube_run_id = ? AND pipeline_run_id = ?").run(cubeRunId, pipelineRunId);
+
+    const insertRow = database.prepare(
+      `INSERT INTO cube_archetype_reconstruction (
+        cube_run_id, pipeline_run_id, period_id, archetype_family, reconstruction_score,
+        total_importance, included_importance, total_targets, included_targets,
+        missing_core_cards_json, warnings_json
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    );
+    for (const row of rows) {
+      insertRow.run(
+        row.cubeRunId,
+        row.pipelineRunId,
+        row.periodId,
+        row.archetypeFamily,
+        row.reconstructionScore,
+        row.totalImportance,
+        row.includedImportance,
+        row.totalTargets,
+        row.includedTargets,
+        JSON.stringify(row.missingCoreCards),
+        JSON.stringify(row.warnings)
+      );
+    }
+
+    database
+      .prepare(
+        `INSERT INTO ecosystem_diversity_summaries (
+          cube_run_id, pipeline_run_id, archetypes_above_threshold,
+          periods_represented, shared_card_efficiency, summary_json
+        )
+        VALUES (?, ?, ?, ?, ?, ?)`
+      )
+      .run(
+        summary.cubeRunId,
+        summary.pipelineRunId,
+        summary.archetypesAboveThreshold,
+        summary.periodsRepresented,
+        summary.sharedCardEfficiency,
+        JSON.stringify(summary.summary)
+      );
+
+    database.exec("COMMIT;");
+  } catch (error) {
+    database.exec("ROLLBACK;");
+    throw error;
+  }
 }
 
 export function replaceCardArchetypeMatrixRows(

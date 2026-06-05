@@ -432,6 +432,49 @@ CREATE TABLE IF NOT EXISTS historical_card_scores (
 CREATE INDEX IF NOT EXISTS idx_historical_card_scores_score ON historical_card_scores(pipeline_run_id, modern_legacy_score DESC);
 CREATE INDEX IF NOT EXISTS idx_historical_card_scores_role ON historical_card_scores(pipeline_run_id, historical_role, modern_legacy_score DESC);
 `
+  },
+  {
+    description: "Archetype reconstruction and ecosystem diversity",
+    id: "0008_archetype_reconstruction",
+    sql: `
+CREATE TABLE IF NOT EXISTS archetype_reconstruction_targets (
+  pipeline_run_id TEXT NOT NULL REFERENCES pipeline_runs(id) ON DELETE CASCADE,
+  period_id TEXT NOT NULL REFERENCES metagame_periods(period_id) ON DELETE CASCADE,
+  archetype_family TEXT NOT NULL,
+  card_name TEXT NOT NULL,
+  target_role TEXT NOT NULL CHECK (target_role IN ('core', 'support', 'glue', 'signpost', 'optional')),
+  importance REAL NOT NULL,
+  PRIMARY KEY (pipeline_run_id, period_id, archetype_family, card_name)
+);
+
+CREATE TABLE IF NOT EXISTS cube_archetype_reconstruction (
+  cube_run_id TEXT NOT NULL REFERENCES cube_runs(id) ON DELETE CASCADE,
+  pipeline_run_id TEXT NOT NULL REFERENCES pipeline_runs(id) ON DELETE CASCADE,
+  period_id TEXT NOT NULL REFERENCES metagame_periods(period_id) ON DELETE CASCADE,
+  archetype_family TEXT NOT NULL,
+  reconstruction_score REAL NOT NULL,
+  total_importance REAL NOT NULL,
+  included_importance REAL NOT NULL,
+  total_targets INTEGER NOT NULL,
+  included_targets INTEGER NOT NULL,
+  missing_core_cards_json TEXT NOT NULL DEFAULT '[]',
+  warnings_json TEXT NOT NULL DEFAULT '[]',
+  PRIMARY KEY (cube_run_id, pipeline_run_id, period_id, archetype_family)
+);
+
+CREATE TABLE IF NOT EXISTS ecosystem_diversity_summaries (
+  cube_run_id TEXT NOT NULL REFERENCES cube_runs(id) ON DELETE CASCADE,
+  pipeline_run_id TEXT NOT NULL REFERENCES pipeline_runs(id) ON DELETE CASCADE,
+  archetypes_above_threshold INTEGER NOT NULL,
+  periods_represented INTEGER NOT NULL,
+  shared_card_efficiency REAL NOT NULL,
+  summary_json TEXT NOT NULL DEFAULT '{}',
+  PRIMARY KEY (cube_run_id, pipeline_run_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_reconstruction_targets_period ON archetype_reconstruction_targets(pipeline_run_id, period_id, archetype_family);
+CREATE INDEX IF NOT EXISTS idx_cube_reconstruction_score ON cube_archetype_reconstruction(cube_run_id, pipeline_run_id, reconstruction_score DESC);
+`
   }
 ];
 

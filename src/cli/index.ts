@@ -3,7 +3,7 @@
 import { copyFileSync, existsSync, mkdirSync, rmSync } from "node:fs";
 import path from "node:path";
 
-import { generateCandidatePools, generateCube, validateCube } from "../build/index.js";
+import { evaluateCubeReconstruction, generateCandidatePools, generateCube, validateCube } from "../build/index.js";
 import { runCollectors } from "../collectors/index.js";
 import { defaultProjectPaths } from "../config/paths.js";
 import {
@@ -86,6 +86,7 @@ Usage:
   cube-refiner score:historical [--db path] --pipeline-run-id id [--aggregate-pipeline-run-id id] [--era-share n] [--pillar-longevity n] [--pillar-peak n] [--icon-peak n] [--flash-peak n] [--flash-max-longevity n] [--weight-glue n] [--weight-longevity n] [--weight-peak n] [--weight-archetype n]
   cube-refiner candidates:generate [--db path] --pipeline-run-id id [--output-dir path]
   cube-refiner cube:generate [--db path] --pipeline-run-id id [--cube-run-id id] [--output-csv path]
+  cube-refiner cube:reconstruct [--db path] --cube-run-id id --pipeline-run-id id [--reconstruction-csv path] [--era-coverage-csv path] [--ecosystem-csv path]
   cube-refiner cube:validate [--db path] --cube-run-id id [--validation-run-id id] [--output-csv path]
 
 Project paths:
@@ -494,6 +495,40 @@ if (command === "cube:generate") {
     if (summary.outputCsvPath) {
       console.log(`Cube CSV: ${summary.outputCsvPath}`);
     }
+  } finally {
+    database.close();
+  }
+  process.exit(0);
+}
+
+if (command === "cube:reconstruct") {
+  const cubeRunId = getOptionValue("--cube-run-id");
+  const pipelineRunId = getOptionValue("--pipeline-run-id");
+  if (!cubeRunId || !pipelineRunId) {
+    console.error("cube:reconstruct requires --cube-run-id and --pipeline-run-id.");
+    process.exit(1);
+  }
+
+  const database = openDatabase({ path: databasePath });
+  try {
+    applyMigrations(database);
+    const summary = evaluateCubeReconstruction(database, {
+      archetypeReconstructionCsvPath: getOptionValue("--reconstruction-csv") ?? `${defaultProjectPaths.outputsDir}/archetype_reconstruction.csv`,
+      coreShare: parseNumberOption(getOptionValue("--core-share")),
+      cubeRunId,
+      ecosystemDiversityCsvPath: getOptionValue("--ecosystem-csv") ?? `${defaultProjectPaths.outputsDir}/ecosystem_diversity_report.csv`,
+      eraCoverageCsvPath: getOptionValue("--era-coverage-csv") ?? `${defaultProjectPaths.outputsDir}/era_coverage.csv`,
+      pipelineRunId,
+      reconstructionThreshold: parseNumberOption(getOptionValue("--reconstruction-threshold")),
+      signpostShare: parseNumberOption(getOptionValue("--signpost-share")),
+      supportShare: parseNumberOption(getOptionValue("--support-share"))
+    });
+    console.log(
+      `Evaluated cube ${summary.cubeRunId}: ${summary.reconstructionRows} archetype/period rows, ${summary.targets} targets.`
+    );
+    console.log(
+      `Ecosystem: ${summary.archetypesAboveThreshold} archetypes above threshold, ${summary.periodsRepresented} periods represented, shared efficiency ${summary.sharedCardEfficiency.toFixed(3)}.`
+    );
   } finally {
     database.close();
   }

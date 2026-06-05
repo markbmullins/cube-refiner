@@ -86,6 +86,9 @@ export function getDatabaseStatus(database: DatabaseSync): DatabaseStatusSummary
       "card_period_matrix",
       "archetype_period_summaries",
       "historical_card_scores",
+      "archetype_reconstruction_targets",
+      "cube_archetype_reconstruction",
+      "ecosystem_diversity_summaries",
       "output_artifacts"
     ].map((table) => [table, tableCount(database, table)])
   );

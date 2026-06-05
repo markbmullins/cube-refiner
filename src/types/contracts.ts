@@ -235,3 +235,37 @@ export type HistoricalCardScoreRow = {
   readonly explanation: string;
   readonly config: unknown;
 };
+
+export type ReconstructionTargetRole = "core" | "support" | "glue" | "signpost" | "optional";
+
+export type ArchetypeReconstructionTargetRow = {
+  readonly pipelineRunId: string;
+  readonly periodId: string;
+  readonly archetypeFamily: string;
+  readonly cardName: string;
+  readonly targetRole: ReconstructionTargetRole;
+  readonly importance: number;
+};
+
+export type CubeArchetypeReconstructionRow = {
+  readonly cubeRunId: string;
+  readonly pipelineRunId: string;
+  readonly periodId: string;
+  readonly archetypeFamily: string;
+  readonly reconstructionScore: number;
+  readonly totalImportance: number;
+  readonly includedImportance: number;
+  readonly totalTargets: number;
+  readonly includedTargets: number;
+  readonly missingCoreCards: readonly string[];
+  readonly warnings: readonly string[];
+};
+
+export type EcosystemDiversitySummaryRow = {
+  readonly cubeRunId: string;
+  readonly pipelineRunId: string;
+  readonly archetypesAboveThreshold: number;
+  readonly periodsRepresented: number;
+  readonly sharedCardEfficiency: number;
+  readonly summary: unknown;
+};
