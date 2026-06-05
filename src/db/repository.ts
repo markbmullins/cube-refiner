@@ -142,6 +142,22 @@ export type CandidatePoolCardInput = {
   readonly explanation: string;
 };
 
+export type CubeRunInput = {
+  readonly id: string;
+  readonly pipelineRunId?: string;
+  readonly config: unknown;
+  readonly createdAt?: string;
+  readonly totalCards: number;
+};
+
+export type CubeRunCardInput = {
+  readonly cubeRunId: string;
+  readonly cardName: string;
+  readonly position: number;
+  readonly roles: readonly CubeCardRole[];
+  readonly reason: string;
+};
+
 export function upsertSourceSnapshot(database: DatabaseSync, input: SourceSnapshotInput): string {
   const id = stableId("source-snapshot", input.source, input.sourceUrl, input.contentHash);
 
@@ -801,6 +817,69 @@ export function listPersistedCandidatePoolCards(
     pool: String(row.pool) as CandidatePool,
     roles: parseJsonArray(row.rolesJson).filter(isCubeCardRole),
     score: Number(row.score)
+  }));
+}
+
+export function upsertCubeRun(database: DatabaseSync, input: CubeRunInput): void {
+  database
+    .prepare(
+      `INSERT INTO cube_runs (id, pipeline_run_id, config_json, created_at, total_cards)
+       VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET
+         pipeline_run_id = excluded.pipeline_run_id,
+         config_json = excluded.config_json,
+         created_at = excluded.created_at,
+         total_cards = excluded.total_cards`
+    )
+    .run(
+      input.id,
+      input.pipelineRunId ?? null,
+      JSON.stringify(input.config),
+      input.createdAt ?? new Date().toISOString(),
+      input.totalCards
+    );
+}
+
+export function replaceCubeRunCards(
+  database: DatabaseSync,
+  cubeRunId: string,
+  cards: readonly CubeRunCardInput[]
+): void {
+  database.exec("BEGIN;");
+  try {
+    database.prepare("DELETE FROM cube_run_cards WHERE cube_run_id = ?").run(cubeRunId);
+    const insert = database.prepare(
+      `INSERT INTO cube_run_cards (cube_run_id, card_name, position, roles_json, reason)
+       VALUES (?, ?, ?, ?, ?)`
+    );
+
+    for (const card of cards) {
+      insert.run(card.cubeRunId, card.cardName, card.position, JSON.stringify(card.roles), card.reason);
+    }
+
+    database.exec("COMMIT;");
+  } catch (error) {
+    database.exec("ROLLBACK;");
+    throw error;
+  }
+}
+
+export function listCubeRunCards(database: DatabaseSync, cubeRunId: string): readonly CubeRunCardInput[] {
+  const rows = database
+    .prepare(
+      `SELECT cube_run_id AS cubeRunId, card_name AS cardName, position, roles_json AS rolesJson, reason
+       FROM cube_run_cards
+       WHERE cube_run_id = ?
+       ORDER BY position`
+    )
+    .all(cubeRunId);
+
+  return rows.map((row) => ({
+    cardName: String(row.cardName),
+    cubeRunId: String(row.cubeRunId),
+    position: Number(row.position),
+    reason: String(row.reason),
+    roles: parseJsonArray(row.rolesJson).filter(isCubeCardRole)
   }));
 }
 

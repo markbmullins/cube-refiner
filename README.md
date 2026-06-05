@@ -155,6 +155,14 @@ pnpm candidates:generate -- --pipeline-run-id <run-id>
 
 This persists candidate assignments in SQLite and exports `auto_includes.csv`, `glue_cards.csv`, `signpost_cards.csv`, `parasitic_review.csv`, `sideboard_cards.csv`, `lands.csv`, `removal.csv`, and `threats.csv`.
 
+Generate the constrained first-pass 360-card cube:
+
+```bash
+pnpm cube:generate -- --pipeline-run-id <run-id>
+```
+
+The cube generator stores a cube run, selected cards, roles, and reason fields in SQLite, then exports `data/outputs/cube_360_candidate.csv`.
+
 ## Shared Contracts
 
 The initial shared contracts live in `src/types/contracts.ts` and cover:

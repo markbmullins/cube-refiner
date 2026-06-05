@@ -2,7 +2,7 @@
 
 import { existsSync, rmSync } from "node:fs";
 
-import { generateCandidatePools } from "../build/index.js";
+import { generateCandidatePools, generateCube } from "../build/index.js";
 import { runCollectors } from "../collectors/index.js";
 import { defaultProjectPaths } from "../config/paths.js";
 import { applyMigrations, openDatabase } from "../db/index.js";
@@ -44,6 +44,7 @@ Usage:
   cube-refiner matrix:build [--db path] [--matrix-csv path] [--archetypes-csv path] [--pipeline-run-id id]
   cube-refiner score:cards [--db path] --pipeline-run-id id [--glue-threshold n] [--signpost-affinity n] [--signpost-exclusivity n] [--signpost-min-decks n]
   cube-refiner candidates:generate [--db path] --pipeline-run-id id [--output-dir path]
+  cube-refiner cube:generate [--db path] --pipeline-run-id id [--cube-run-id id] [--output-csv path]
 
 Project paths:
   raw data:        ${defaultProjectPaths.rawDataDir}
@@ -236,6 +237,32 @@ if (command === "candidates:generate") {
     console.log(`Persisted ${summary.persistedRows} candidate pool rows for run ${summary.pipelineRunId}.`);
     for (const [pool, filePath] of Object.entries(summary.exportedCsvPaths)) {
       console.log(`${pool}: ${filePath}`);
+    }
+  } finally {
+    database.close();
+  }
+  process.exit(0);
+}
+
+if (command === "cube:generate") {
+  const pipelineRunId = getOptionValue("--pipeline-run-id");
+  if (!pipelineRunId) {
+    console.error("cube:generate requires --pipeline-run-id.");
+    process.exit(1);
+  }
+
+  const database = openDatabase({ path: databasePath });
+  try {
+    applyMigrations(database);
+    const summary = generateCube(database, {
+      cubeRunId: getOptionValue("--cube-run-id"),
+      outputCsvPath: getOptionValue("--output-csv") ?? `${defaultProjectPaths.outputsDir}/cube_360_candidate.csv`,
+      pipelineRunId,
+      totalCards: parsePositiveInteger(getOptionValue("--total-cards"))
+    });
+    console.log(`Generated cube ${summary.cubeRunId} with ${summary.selectedCards} cards.`);
+    if (summary.outputCsvPath) {
+      console.log(`Cube CSV: ${summary.outputCsvPath}`);
     }
   } finally {
     database.close();
