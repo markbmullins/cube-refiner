@@ -8,6 +8,7 @@ import { applyMigrations, openDatabase } from "../db/index.js";
 import {
   fetchAndImportScryfallDefaultCards,
   importScryfallCardsFromFile,
+  normalizeArchetypes,
   normalizeCards
 } from "../normalize/index.js";
 import type { DeckSource } from "../types/contracts.js";
@@ -35,6 +36,7 @@ Usage:
   cube-refiner collect:mtgo [--db path] [--raw-dir path] [--refresh]
   cube-refiner collect:mtggoldfish [--db path] [--raw-dir path] [--refresh] [--events ids-or-urls]
   cube-refiner normalize:cards [--db path] [--scryfall-file path] [--fetch-scryfall] [--audit-csv path] [--fail-on-unknown]
+  cube-refiner normalize:archetypes [--db path] [--mapping-file path] [--audit-csv path] [--fail-on-unmapped]
 
 Project paths:
   raw data:        ${defaultProjectPaths.rawDataDir}
@@ -97,6 +99,28 @@ if (command === "normalize:cards") {
     });
     console.log(
       `Normalized ${summary.normalizedDecks} decks; mapped ${summary.mappedNames} raw names; unresolved ${summary.unresolvedNames}.`
+    );
+    if (summary.auditCsvPath) {
+      console.log(`Audit CSV: ${summary.auditCsvPath}`);
+    }
+  } finally {
+    database.close();
+  }
+  process.exit(0);
+}
+
+if (command === "normalize:archetypes") {
+  const database = openDatabase({ path: databasePath });
+  try {
+    applyMigrations(database);
+    const summary = normalizeArchetypes(database, {
+      auditCsvPath: getOptionValue("--audit-csv") ?? `${defaultProjectPaths.outputsDir}/archetype_audit.csv`,
+      failOnUnmapped: args.includes("--fail-on-unmapped"),
+      mappingFilePath: getOptionValue("--mapping-file")
+    });
+    console.log(
+      `Normalized archetypes on ${summary.normalizedDecks} decks; mapped ${summary.mappedLabels} labels; ` +
+        `unmapped ${summary.unmappedLabels}; ambiguous ${summary.ambiguousLabels}.`
     );
     if (summary.auditCsvPath) {
       console.log(`Audit CSV: ${summary.auditCsvPath}`);

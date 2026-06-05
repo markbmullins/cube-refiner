@@ -111,6 +111,15 @@ pnpm normalize:cards -- --fetch-scryfall
 
 Unknown card names are persisted as unresolved mapping rows with source/deck context. Add `--fail-on-unknown` when you want the run to fail after writing the audit trail.
 
+Archetype normalization uses `data/archetype-mappings.json` by default and updates normalized decks with both an archetype and broader archetype family:
+
+```bash
+pnpm normalize:archetypes
+pnpm normalize:archetypes -- --mapping-file data/archetype-mappings.json --fail-on-unmapped
+```
+
+Unmapped or ambiguous labels are persisted in SQLite for review and written to `data/outputs/archetype_audit.csv`.
+
 ## Shared Contracts
 
 The initial shared contracts live in `src/types/contracts.ts` and cover:

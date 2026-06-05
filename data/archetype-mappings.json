@@ -1,0 +1,50 @@
+[
+  {
+    "archetype": "BGx Midrange",
+    "archetypeFamily": "BGx Midrange",
+    "confidence": 1,
+    "labels": ["Jund", "BGx Midrange", "Black Green Red Midrange", "Abzan", "Abzan Control", "Rock"]
+  },
+  {
+    "archetype": "Twin",
+    "archetypeFamily": "Twin",
+    "confidence": 1,
+    "labels": ["Splinter Twin", "Twin Exarch", "Grixis Twin", "Temur Twin", "UR Twin", "Tarmo Twin"]
+  },
+  {
+    "archetype": "Birthing Pod",
+    "archetypeFamily": "Birthing Pod",
+    "confidence": 1,
+    "labels": ["Melira Pod", "Kiki Pod", "Birthing Pod", "Angel Pod"]
+  },
+  {
+    "archetype": "Artifact Aggro",
+    "archetypeFamily": "Artifact Aggro",
+    "confidence": 1,
+    "labels": ["Affinity", "Robots", "Hardened Scales Affinity"]
+  },
+  {
+    "archetype": "Burn",
+    "archetypeFamily": "Burn",
+    "confidence": 1,
+    "labels": ["Burn", "Naya Burn", "Boros Burn", "Red Deck Wins"]
+  },
+  {
+    "archetype": "Tron",
+    "archetypeFamily": "Tron",
+    "confidence": 1,
+    "labels": ["Tron", "GR Tron", "Green Tron", "Mono Green Tron", "Eldrazi Tron"]
+  },
+  {
+    "archetype": "Infect",
+    "archetypeFamily": "Infect",
+    "confidence": 1,
+    "labels": ["Infect", "UG Infect", "Mono Green Infect"]
+  },
+  {
+    "archetype": "Death's Shadow",
+    "archetypeFamily": "Death's Shadow",
+    "confidence": 1,
+    "labels": ["Death's Shadow", "Grixis Death's Shadow", "Jund Death's Shadow"]
+  }
+]

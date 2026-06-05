@@ -72,6 +72,12 @@ export type CardNameMappingRecord = {
   readonly status: "mapped" | "unresolved" | "ignored";
 };
 
+export type NormalizedDeckArchetypeRecord = {
+  readonly deckId: string;
+  readonly archetype: string;
+  readonly archetypeFamily: string;
+};
+
 export function upsertSourceSnapshot(database: DatabaseSync, input: SourceSnapshotInput): string {
   const id = stableId("source-snapshot", input.source, input.sourceUrl, input.contentHash);
 
@@ -349,6 +355,35 @@ export function listCardNameMappings(database: DatabaseSync): readonly CardNameM
 export function listCanonicalCardNames(database: DatabaseSync): readonly string[] {
   const rows = database.prepare("SELECT canonical_name AS canonicalName FROM cards ORDER BY canonical_name").all();
   return rows.map((row) => String(row.canonicalName));
+}
+
+export function listNormalizedDeckArchetypes(database: DatabaseSync): readonly NormalizedDeckArchetypeRecord[] {
+  const rows = database
+    .prepare(
+      `SELECT deck_id AS deckId, archetype, archetype_family AS archetypeFamily
+       FROM normalized_decks
+       ORDER BY deck_id`
+    )
+    .all();
+
+  return rows.map((row) => ({
+    archetype: String(row.archetype),
+    archetypeFamily: String(row.archetypeFamily),
+    deckId: String(row.deckId)
+  }));
+}
+
+export function updateNormalizedDeckArchetype(
+  database: DatabaseSync,
+  input: NormalizedDeckArchetypeRecord
+): void {
+  database
+    .prepare(
+      `UPDATE normalized_decks
+       SET archetype = ?, archetype_family = ?, updated_at = ?
+       WHERE deck_id = ?`
+    )
+    .run(input.archetype, input.archetypeFamily, new Date().toISOString(), input.deckId);
 }
 
 export function listMatrixInputRows(database: DatabaseSync): readonly MatrixInputRow[] {
