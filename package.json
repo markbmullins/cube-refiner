@@ -1,0 +1,41 @@
+{
+  "name": "cube-refiner",
+  "version": "1.0.0",
+  "description": "ETL and analytics tooling for building a 2013-2017 Modern nostalgia cube from historical decklists.",
+  "bin": {
+    "cube-refiner": "./dist/cli/index.js"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "check": "tsc --noEmit",
+    "dev": "tsx src/cli/index.ts",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "keywords": [
+    "magic-the-gathering",
+    "cube",
+    "modern",
+    "etl",
+    "analytics"
+  ],
+  "author": "",
+  "license": "MIT",
+  "packageManager": "pnpm@11.5.2",
+  "engines": {
+    "node": ">=22"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "tsup": "^8.5.0",
+    "tsx": "^4.20.0",
+    "typescript": "^5.8.0",
+    "vitest": "^3.2.0"
+  },
+  "type": "module"
+}

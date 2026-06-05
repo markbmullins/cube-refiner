@@ -1,1 +1,66 @@
-# cube-refiner
+# Cube Refiner
+
+Cube Refiner is an ETL and analytics project for building a 2013-2017 Modern nostalgia cube from historical decklists.
+
+The guiding workflow is:
+
+1. Collect raw historical Modern decklists.
+2. Normalize card names and archetype labels.
+3. Deduplicate exact repeats and downweight near duplicates.
+4. Build card/archetype matrices.
+5. Score glue, affinity, exclusivity, signposts, parasitic cards, and final cube candidates.
+6. Generate candidate pools.
+7. Build a constrained 360-card cube.
+8. Validate the cube and export human-friendly CSVs.
+
+## Project Layout
+
+```text
+data/
+  raw/          Raw source snapshots and parser audit artifacts
+  normalized/   Optional normalized exports for inspection
+  outputs/      Generated CSVs, Cube Cobra imports, and reports
+src/
+  cli/          Command-line entrypoint
+  collectors/   Source-specific decklist collectors
+  config/       Paths and project configuration
+  normalize/    Card and archetype normalization
+  scoring/      Matrix and scoring algorithms
+  build/        Candidate-pool and cube-generation logic
+  export/       CSV and Cube Cobra exporters
+  types/        Shared data contracts
+```
+
+## Persistence Model
+
+SQLite is the canonical working store for the pipeline. The default database path is:
+
+```text
+data/cube-refiner.sqlite
+```
+
+Raw JSON snapshots and CSV files are still useful, but they are audit and export artifacts rather than the primary handoff between stages.
+
+## Development
+
+```bash
+pnpm install
+pnpm check
+pnpm test
+pnpm build
+pnpm dev -- help
+```
+
+## Shared Contracts
+
+The initial shared contracts live in `src/types/contracts.ts` and cover:
+
+- `RawDeck`
+- `DeckCard`
+- `NormalizedDeck`
+- matrix rows
+- score rows
+- candidate pools
+- generated cube candidates
+- validation summaries
+- pipeline runs

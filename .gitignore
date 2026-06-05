@@ -1,0 +1,15 @@
+node_modules/
+dist/
+coverage/
+.env
+.env.*
+!.env.example
+
+data/raw/**
+data/normalized/**
+data/outputs/**
+data/*.sqlite
+data/*.sqlite-*
+!data/raw/.gitkeep
+!data/normalized/.gitkeep
+!data/outputs/.gitkeep
