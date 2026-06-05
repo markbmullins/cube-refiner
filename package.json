@@ -19,6 +19,7 @@
     "collect:mtgtop8": "tsx src/cli/index.ts collect:mtgtop8",
     "dedupe:decks": "tsx src/cli/index.ts dedupe:decks",
     "dev": "tsx src/cli/index.ts",
+    "matrix:build": "tsx src/cli/index.ts matrix:build",
     "normalize:archetypes": "tsx src/cli/index.ts normalize:archetypes",
     "normalize:cards": "tsx src/cli/index.ts normalize:cards",
     "test": "vitest run",

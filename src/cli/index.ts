@@ -12,6 +12,7 @@ import {
   normalizeArchetypes,
   normalizeCards
 } from "../normalize/index.js";
+import { buildCardArchetypeMatrix } from "../scoring/index.js";
 import type { DeckSource } from "../types/contracts.js";
 
 const args = process.argv.slice(2);
@@ -39,6 +40,7 @@ Usage:
   cube-refiner normalize:cards [--db path] [--scryfall-file path] [--fetch-scryfall] [--audit-csv path] [--fail-on-unknown]
   cube-refiner normalize:archetypes [--db path] [--mapping-file path] [--audit-csv path] [--fail-on-unmapped]
   cube-refiner dedupe:decks [--db path] [--report-csv path] [--near-overlap count]
+  cube-refiner matrix:build [--db path] [--matrix-csv path] [--archetypes-csv path] [--pipeline-run-id id]
 
 Project paths:
   raw data:        ${defaultProjectPaths.rawDataDir}
@@ -146,6 +148,30 @@ if (command === "dedupe:decks") {
     );
     if (summary.reportCsvPath) {
       console.log(`Dedupe report CSV: ${summary.reportCsvPath}`);
+    }
+  } finally {
+    database.close();
+  }
+  process.exit(0);
+}
+
+if (command === "matrix:build") {
+  const database = openDatabase({ path: databasePath });
+  try {
+    applyMigrations(database);
+    const summary = buildCardArchetypeMatrix(database, {
+      archetypeSummaryCsvPath: getOptionValue("--archetypes-csv") ?? `${defaultProjectPaths.outputsDir}/archetypes_summary.csv`,
+      matrixCsvPath: getOptionValue("--matrix-csv") ?? `${defaultProjectPaths.outputsDir}/card_archetype_matrix.csv`,
+      pipelineRunId: getOptionValue("--pipeline-run-id")
+    });
+    console.log(
+      `Built ${summary.matrixRows} matrix rows and ${summary.archetypeSummaryRows} archetype summaries for run ${summary.pipelineRunId}.`
+    );
+    if (summary.matrixCsvPath) {
+      console.log(`Matrix CSV: ${summary.matrixCsvPath}`);
+    }
+    if (summary.archetypeSummaryCsvPath) {
+      console.log(`Archetype summary CSV: ${summary.archetypeSummaryCsvPath}`);
     }
   } finally {
     database.close();

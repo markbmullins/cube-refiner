@@ -129,6 +129,15 @@ pnpm dedupe:decks -- --near-overlap 55 --report-csv data/outputs/dedupe_report.c
 
 Exact duplicate copies are weighted to `0` after the deterministic representative. Near duplicates in the same archetype family and month are downweighted rather than removed.
 
+Build the weighted card/archetype matrix and archetype summaries:
+
+```bash
+pnpm matrix:build
+pnpm matrix:build -- --matrix-csv data/outputs/card_archetype_matrix.csv --archetypes-csv data/outputs/archetypes_summary.csv
+```
+
+Matrix rows are persisted in SQLite by pipeline run id, and CSVs are exports from those persisted rows.
+
 ## Shared Contracts
 
 The initial shared contracts live in `src/types/contracts.ts` and cover:

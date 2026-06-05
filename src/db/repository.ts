@@ -102,6 +102,25 @@ export type DeckWeightInput = {
   readonly explanation: string;
 };
 
+export type PipelineRunInput = {
+  readonly id: string;
+  readonly configHash: string;
+  readonly status?: "running" | "completed" | "failed";
+  readonly startedAt?: string;
+  readonly completedAt?: string;
+};
+
+export type CardArchetypeMatrixInput = {
+  readonly pipelineRunId: string;
+  readonly cardName: string;
+  readonly archetypeFamily: string;
+  readonly decksWithCard: number;
+  readonly totalDecksInArchetype: number;
+  readonly mainboardCopies: number;
+  readonly sideboardCopies: number;
+  readonly affinity: number;
+};
+
 export function upsertSourceSnapshot(database: DatabaseSync, input: SourceSnapshotInput): string {
   const id = stableId("source-snapshot", input.source, input.sourceUrl, input.contentHash);
 
@@ -134,6 +153,25 @@ export function upsertSourceSnapshot(database: DatabaseSync, input: SourceSnapsh
     );
 
   return id;
+}
+
+export function upsertPipelineRun(database: DatabaseSync, input: PipelineRunInput): void {
+  database
+    .prepare(
+      `INSERT INTO pipeline_runs (id, started_at, completed_at, config_hash, status)
+       VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET
+         completed_at = excluded.completed_at,
+         config_hash = excluded.config_hash,
+         status = excluded.status`
+    )
+    .run(
+      input.id,
+      input.startedAt ?? new Date().toISOString(),
+      input.completedAt ?? null,
+      input.configHash,
+      input.status ?? "running"
+    );
 }
 
 export function upsertRawDeck(
@@ -522,6 +560,75 @@ export function listMatrixInputRows(database: DatabaseSync): readonly MatrixInpu
     deckId: String(row.deckId),
     weight: Number(row.weight),
     zone: String(row.zone) === "sideboard" ? "sideboard" : "mainboard"
+  }));
+}
+
+export function replaceCardArchetypeMatrixRows(
+  database: DatabaseSync,
+  pipelineRunId: string,
+  rows: readonly CardArchetypeMatrixInput[]
+): void {
+  database.exec("BEGIN;");
+  try {
+    database.prepare("DELETE FROM card_archetype_matrix WHERE pipeline_run_id = ?").run(pipelineRunId);
+    const insert = database.prepare(
+      `INSERT INTO card_archetype_matrix (
+        pipeline_run_id, card_name, archetype_family, decks_with_card,
+        total_decks_in_archetype, mainboard_copies, sideboard_copies, affinity
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+    );
+
+    for (const row of rows) {
+      insert.run(
+        row.pipelineRunId,
+        row.cardName,
+        row.archetypeFamily,
+        row.decksWithCard,
+        row.totalDecksInArchetype,
+        row.mainboardCopies,
+        row.sideboardCopies,
+        row.affinity
+      );
+    }
+
+    database.exec("COMMIT;");
+  } catch (error) {
+    database.exec("ROLLBACK;");
+    throw error;
+  }
+}
+
+export function listPersistedMatrixRows(
+  database: DatabaseSync,
+  pipelineRunId: string
+): readonly CardArchetypeMatrixInput[] {
+  const rows = database
+    .prepare(
+      `SELECT
+        pipeline_run_id AS pipelineRunId,
+        card_name AS cardName,
+        archetype_family AS archetypeFamily,
+        decks_with_card AS decksWithCard,
+        total_decks_in_archetype AS totalDecksInArchetype,
+        mainboard_copies AS mainboardCopies,
+        sideboard_copies AS sideboardCopies,
+        affinity
+      FROM card_archetype_matrix
+      WHERE pipeline_run_id = ?
+      ORDER BY archetype_family, card_name`
+    )
+    .all(pipelineRunId);
+
+  return rows.map((row) => ({
+    affinity: Number(row.affinity),
+    archetypeFamily: String(row.archetypeFamily),
+    cardName: String(row.cardName),
+    decksWithCard: Number(row.decksWithCard),
+    mainboardCopies: Number(row.mainboardCopies),
+    pipelineRunId: String(row.pipelineRunId),
+    sideboardCopies: Number(row.sideboardCopies),
+    totalDecksInArchetype: Number(row.totalDecksInArchetype)
   }));
 }
 
