@@ -1,6 +1,6 @@
 # Cube Refiner
 
-Cube Refiner is an ETL and analytics project for building a 2013-2017 Modern nostalgia cube from historical decklists.
+Cube Refiner is an ETL and analytics project for building a configurable historical Modern cube from decklists.
 
 The guiding workflow is:
 

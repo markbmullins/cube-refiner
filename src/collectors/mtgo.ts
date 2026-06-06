@@ -3,8 +3,8 @@ import { monthsForHistoricalDateRange, parseHistoricalDateRange, yearsForHistori
 import type { CollectorContext, DeckCollector } from "./types.js";
 
 const mtgoBaseUrl = "https://www.mtgo.com";
-const defaultYears = [2015, 2016, 2017] as const;
 const allMonths = ["01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11", "12"] as const;
+const mtgoModernDecklistArchiveStart = "2015-11";
 
 export type MtgoDecklistIndexItem = {
   readonly title: string;
@@ -56,7 +56,7 @@ export const mtgoCollector: DeckCollector = {
     for (const year of years) {
       const months = parseMonths(context.options.months, context, year);
       for (const month of months) {
-        if (year === 2015 && Number(month) < 11) {
+        if (`${year}-${month}` < mtgoModernDecklistArchiveStart) {
           continue;
         }
 
@@ -195,10 +195,10 @@ function normalizeDate(value: string | undefined): string | undefined {
 
 function parseYears(value: string | undefined, context?: CollectorContext): readonly number[] {
   if (!value) {
-    return context ? yearsForHistoricalDateRange(parseHistoricalDateRange({
-      endDate: context.options.endDate,
-      startDate: context.options.startDate
-    })) : [...defaultYears];
+    return yearsForHistoricalDateRange(parseHistoricalDateRange({
+      endDate: context?.options.endDate,
+      startDate: context?.options.startDate
+    }));
   }
 
   const years = value
@@ -206,7 +206,7 @@ function parseYears(value: string | undefined, context?: CollectorContext): read
     .map((year) => Number(year.trim()))
     .filter((year) => Number.isInteger(year));
 
-  return years.length > 0 ? years : [...defaultYears];
+  return years.length > 0 ? years : yearsForHistoricalDateRange(parseHistoricalDateRange());
 }
 
 function parseMonths(value: string | undefined, context?: CollectorContext, year?: number): readonly string[] {

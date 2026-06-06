@@ -4,7 +4,6 @@ import type { CollectorContext, DeckCollector } from "./types.js";
 
 const mtgTop8BaseUrl = "https://www.mtgtop8.com";
 const modernFormatUrl = `${mtgTop8BaseUrl}/format?f=MO`;
-const defaultYears = [2013, 2014, 2015, 2016, 2017] as const;
 
 export type MtgTop8ArchiveEvent = {
   readonly eventId: string;
@@ -233,10 +232,10 @@ function parseEventDate(html: string): string | undefined {
 
 function parseYears(value: string | undefined, context?: CollectorContext): readonly number[] {
   if (!value) {
-    return context ? yearsForHistoricalDateRange(parseHistoricalDateRange({
-      endDate: context.options.endDate,
-      startDate: context.options.startDate
-    })) : [...defaultYears];
+    return yearsForHistoricalDateRange(parseHistoricalDateRange({
+      endDate: context?.options.endDate,
+      startDate: context?.options.startDate
+    }));
   }
 
   const years = value
@@ -244,7 +243,7 @@ function parseYears(value: string | undefined, context?: CollectorContext): read
     .map((year) => Number(year.trim()))
     .filter((year) => Number.isInteger(year));
 
-  return years.length > 0 ? years : [...defaultYears];
+  return years.length > 0 ? years : yearsForHistoricalDateRange(parseHistoricalDateRange());
 }
 
 function applyLimit<T>(items: readonly T[], limitValue: string | undefined): readonly T[] {

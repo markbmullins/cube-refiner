@@ -3,7 +3,6 @@ import { parseHistoricalDateRange, yearsForHistoricalDateRange } from "../config
 import type { CollectorContext, DeckCollector } from "./types.js";
 
 const mtgGoldfishBaseUrl = "https://www.mtggoldfish.com";
-const defaultYears = [2013, 2014, 2015, 2016, 2017] as const;
 
 export type MtgGoldfishTournamentMetadata = {
   readonly eventDate?: string;
@@ -272,10 +271,10 @@ export function parseTournamentInputs(value: string | undefined): readonly strin
 
 function parseYears(value: string | undefined, context?: CollectorContext): readonly number[] {
   if (!value) {
-    return context ? yearsForHistoricalDateRange(parseHistoricalDateRange({
-      endDate: context.options.endDate,
-      startDate: context.options.startDate
-    })) : [...defaultYears];
+    return yearsForHistoricalDateRange(parseHistoricalDateRange({
+      endDate: context?.options.endDate,
+      startDate: context?.options.startDate
+    }));
   }
 
   const years = value
@@ -283,7 +282,7 @@ function parseYears(value: string | undefined, context?: CollectorContext): read
     .map((year) => Number(year.trim()))
     .filter((year) => Number.isInteger(year));
 
-  return years.length > 0 ? years : [...defaultYears];
+  return years.length > 0 ? years : yearsForHistoricalDateRange(parseHistoricalDateRange());
 }
 
 function applyLimit<T>(items: readonly T[], limitValue: string | undefined): readonly T[] {
