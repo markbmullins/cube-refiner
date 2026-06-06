@@ -3,7 +3,7 @@
 import { copyFileSync, existsSync, mkdirSync, rmSync } from "node:fs";
 import path from "node:path";
 
-import { evaluateCubeReconstruction, generateCandidatePools, generateCube, validateCube } from "../build/index.js";
+import { evaluateCubeReconstruction, generateCandidatePools, generateCube, validateCube, validateHistoricalCube } from "../build/index.js";
 import { runCollectors } from "../collectors/index.js";
 import { defaultProjectPaths } from "../config/paths.js";
 import {
@@ -88,6 +88,7 @@ Usage:
   cube-refiner cube:generate [--db path] --pipeline-run-id id [--cube-run-id id] [--output-csv path] [--mode aggregate|historical] [--min-format-pillars n] [--min-archetype-icons n] [--min-periods n]
   cube-refiner cube:reconstruct [--db path] --cube-run-id id --pipeline-run-id id [--reconstruction-csv path] [--era-coverage-csv path] [--ecosystem-csv path]
   cube-refiner cube:validate [--db path] --cube-run-id id [--validation-run-id id] [--output-csv path]
+  cube-refiner cube:validate:historical [--db path] --cube-run-id id --pipeline-run-id id [--validation-run-id id] [--historical-validation-csv path] [--historical-period-csv path] [--historical-reconstruction-csv path]
 
 Project paths:
   raw data:        ${defaultProjectPaths.rawDataDir}
@@ -574,6 +575,42 @@ if (command === "cube:validate") {
   process.exit(0);
 }
 
+if (command === "cube:validate:historical") {
+  const cubeRunId = getOptionValue("--cube-run-id");
+  const pipelineRunId = getOptionValue("--pipeline-run-id");
+  if (!cubeRunId || !pipelineRunId) {
+    console.error("cube:validate:historical requires --cube-run-id and --pipeline-run-id.");
+    process.exit(1);
+  }
+
+  const database = openDatabase({ path: databasePath });
+  try {
+    applyMigrations(database);
+    const summary = validateHistoricalCube(database, {
+      cubeRunId,
+      historicalArchetypeReconstructionCsvPath: getOptionValue("--historical-reconstruction-csv") ?? `${defaultProjectPaths.outputsDir}/historical_archetype_reconstruction.csv`,
+      historicalPeriodCoverageCsvPath: getOptionValue("--historical-period-csv") ?? `${defaultProjectPaths.outputsDir}/historical_period_coverage.csv`,
+      historicalValidationCsvPath: getOptionValue("--historical-validation-csv") ?? `${defaultProjectPaths.outputsDir}/historical_cube_validation_report.csv`,
+      maximumFlashInThePan: parsePositiveInteger(getOptionValue("--max-flashes")),
+      maximumPeriodCoverage: parsePositiveInteger(getOptionValue("--max-period-coverage")),
+      minimumEcosystemDiversityScore: parseNumberOption(getOptionValue("--min-ecosystem-diversity")),
+      minimumPeriodCoverage: parsePositiveInteger(getOptionValue("--min-period-coverage")),
+      minimumReconstructionScore: parseNumberOption(getOptionValue("--min-reconstruction-score")),
+      pipelineRunId,
+      validationRunId: getOptionValue("--validation-run-id")
+    });
+    console.log(
+      `Historical validation ${summary.validationRunId} completed as ${summary.status}; metrics ${summary.metrics}; warnings ${summary.warnings}.`
+    );
+    console.log(`Historical validation CSV: ${summary.historicalValidationCsvPath}`);
+    console.log(`Historical period coverage CSV: ${summary.historicalPeriodCoverageCsvPath}`);
+    console.log(`Historical archetype reconstruction CSV: ${summary.historicalArchetypeReconstructionCsvPath}`);
+  } finally {
+    database.close();
+  }
+  process.exit(0);
+}
+
 if (command === "db:init" || command === "db:migrate") {
   const database = openDatabase({ path: databasePath });
   try {
@@ -806,6 +843,7 @@ function parseReviewQueue(value: string | undefined): Parameters<typeof listManu
     value === "dedupe_ambiguities" ||
     value === "period_assignments" ||
     value === "historical_coverage" ||
+    value === "historical_validation" ||
     value === "parasitic_cards" ||
     value === "validation_warnings" ||
     value === "zero_support_cards"

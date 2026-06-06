@@ -475,6 +475,44 @@ CREATE TABLE IF NOT EXISTS ecosystem_diversity_summaries (
 CREATE INDEX IF NOT EXISTS idx_reconstruction_targets_period ON archetype_reconstruction_targets(pipeline_run_id, period_id, archetype_family);
 CREATE INDEX IF NOT EXISTS idx_cube_reconstruction_score ON cube_archetype_reconstruction(cube_run_id, pipeline_run_id, reconstruction_score DESC);
 `
+  },
+  {
+    description: "Historical cube validation metrics and warnings",
+    id: "0009_historical_validation",
+    sql: `
+CREATE TABLE IF NOT EXISTS historical_validation_runs (
+  id TEXT PRIMARY KEY,
+  cube_run_id TEXT NOT NULL REFERENCES cube_runs(id) ON DELETE CASCADE,
+  pipeline_run_id TEXT NOT NULL REFERENCES pipeline_runs(id) ON DELETE CASCADE,
+  status TEXT NOT NULL CHECK (status IN ('pass', 'warn', 'fail')),
+  config_json TEXT NOT NULL DEFAULT '{}',
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS historical_validation_metrics (
+  validation_run_id TEXT NOT NULL REFERENCES historical_validation_runs(id) ON DELETE CASCADE,
+  metric_key TEXT NOT NULL,
+  label TEXT NOT NULL,
+  value REAL NOT NULL,
+  metadata_json TEXT NOT NULL DEFAULT '{}',
+  PRIMARY KEY (validation_run_id, metric_key)
+);
+
+CREATE TABLE IF NOT EXISTS historical_validation_warnings (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  validation_run_id TEXT NOT NULL REFERENCES historical_validation_runs(id) ON DELETE CASCADE,
+  cube_run_id TEXT NOT NULL REFERENCES cube_runs(id) ON DELETE CASCADE,
+  pipeline_run_id TEXT NOT NULL REFERENCES pipeline_runs(id) ON DELETE CASCADE,
+  severity TEXT NOT NULL CHECK (severity IN ('warn', 'fail')),
+  code TEXT NOT NULL,
+  message TEXT NOT NULL,
+  metadata_json TEXT NOT NULL DEFAULT '{}',
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_historical_validation_metrics_run ON historical_validation_metrics(validation_run_id, metric_key);
+CREATE INDEX IF NOT EXISTS idx_historical_validation_warnings_run ON historical_validation_warnings(validation_run_id, code);
+`
   }
 ];
 

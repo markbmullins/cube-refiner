@@ -29,6 +29,7 @@ export type ManualReviewQueue =
   | "dedupe_ambiguities"
   | "period_assignments"
   | "historical_coverage"
+  | "historical_validation"
   | "parasitic_cards"
   | "validation_warnings"
   | "zero_support_cards";
@@ -89,6 +90,9 @@ export function getDatabaseStatus(database: DatabaseSync): DatabaseStatusSummary
       "archetype_reconstruction_targets",
       "cube_archetype_reconstruction",
       "ecosystem_diversity_summaries",
+      "historical_validation_runs",
+      "historical_validation_metrics",
+      "historical_validation_warnings",
       "output_artifacts"
     ].map((table) => [table, tableCount(database, table)])
   );
@@ -123,6 +127,7 @@ export function listManualReviewItems(
         "dedupe_ambiguities",
         "period_assignments",
         "historical_coverage",
+        "historical_validation",
         "parasitic_cards",
         "validation_warnings",
         "zero_support_cards"
@@ -334,6 +339,33 @@ function listQueue(database: DatabaseSync, queue: ManualReviewQueue): readonly M
           pipelineRunId: row.pipelineRunId,
           severity: row.severity,
           warningType: row.warningType
+        })
+      );
+  }
+
+  if (queue === "historical_validation") {
+    return database
+      .prepare(
+        `SELECT
+          id,
+          validation_run_id AS validationRunId,
+          cube_run_id AS cubeRunId,
+          pipeline_run_id AS pipelineRunId,
+          severity,
+          code,
+          message,
+          metadata_json AS metadataJson
+         FROM historical_validation_warnings
+         ORDER BY validation_run_id, severity DESC, code, id`
+      )
+      .all()
+      .map((row) =>
+        reviewItem(queue, String(row.code), String(row.message), {
+          ...parseJsonObject(row.metadataJson),
+          cubeRunId: row.cubeRunId,
+          pipelineRunId: row.pipelineRunId,
+          severity: row.severity,
+          validationRunId: row.validationRunId
         })
       );
   }

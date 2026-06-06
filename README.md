@@ -97,6 +97,24 @@ pnpm dev -- db:reviews --queue historical_coverage
 
 The coverage command refreshes deck-to-period assignments, writes `data/outputs/historical_source_coverage.csv`, persists period/source/archetype-family coverage rows, and registers the CSV as an artifact. The report includes a year rollup column for readability, but every warning is anchored to the primary set-release period. Empty periods, periods below the configured deck threshold, and zero-count sources marked `unknown` or `unavailable` in `data/source-coverage-manifest.json` become DB-backed review warnings so missing source coverage is not treated as zero observed play.
 
+The Historical Modern workflow is intentionally different from a greatest-hits cube. Aggregate frequency finds broadly strong cards; historical scoring also asks whether the cube preserves the lived shape of Modern across Standard set-release windows. Format pillars are long-lived cards that repeatedly mattered, archetype icons are high-peak cards tied to specific experiences, and flashes in the pan are short-lived spikes that deserve review before becoming automatic inclusions.
+
+Run the historical stages in order:
+
+```bash
+pnpm dev -- periods:generate --start-date 2011-08-12 --end-date 2019-04-30
+pnpm dev -- coverage:historical
+pnpm dev -- matrix:periods --pipeline-run-id historical-modern-v1
+pnpm dev -- score:historical --pipeline-run-id historical-modern-v1
+pnpm dev -- cube:generate --pipeline-run-id historical-modern-v1 --mode historical --cube-run-id historical-cube-v1
+pnpm dev -- cube:reconstruct --cube-run-id historical-cube-v1 --pipeline-run-id historical-modern-v1
+pnpm dev -- cube:validate:historical --cube-run-id historical-cube-v1 --pipeline-run-id historical-modern-v1
+pnpm dev -- db:reviews --queue historical_coverage
+pnpm dev -- db:reviews --queue historical_validation
+```
+
+Tune date ranges and period definitions with `periods:generate`; tune source assumptions in `data/source-coverage-manifest.json`; tune historical scoring with `score:historical` threshold and weight flags; tune historical cube generation with `cube:generate --mode historical` minimum pillar, icon, and period coverage flags.
+
 ## End-to-End Pipeline
 
 Run the full DB-first pipeline from collection through validation and exports:
@@ -131,6 +149,9 @@ Major outputs are written to `data/outputs/` by default:
 - `archetype_reconstruction.csv`
 - `era_coverage.csv`
 - `ecosystem_diversity_report.csv`
+- `historical_cube_validation_report.csv`
+- `historical_period_coverage.csv`
+- `historical_archetype_reconstruction.csv`
 - `cube_validation_report.csv`
 - `cube_cobra_import.txt`
 - `historical_source_coverage.csv`
@@ -269,6 +290,15 @@ pnpm cube:validate -- --cube-run-id <cube-run-id> --min-removal 35 --max-zero-su
 ```
 
 Validation stores a validation run, aggregate health metrics, per-archetype support counts, warning rows, and zero-support card review rows in SQLite. The CSV at `data/outputs/cube_validation_report.csv` is a reproducible export from the stored validation run.
+
+Validate a historical cube:
+
+```bash
+pnpm dev -- cube:validate:historical --cube-run-id <cube-run-id> --pipeline-run-id <period-matrix-run-id>
+pnpm dev -- db:reviews --queue historical_validation
+```
+
+Historical validation stores metrics and warnings for set-release period coverage, format pillar inclusion, archetype icon inclusion, reconstruction scores, ecosystem diversity, and flash-in-the-pan review counts. It exports `historical_cube_validation_report.csv`, `historical_period_coverage.csv`, and `historical_archetype_reconstruction.csv`, and registers those files in the artifact registry.
 
 ## Shared Contracts
 

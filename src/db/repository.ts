@@ -15,6 +15,9 @@ import type {
   HistoricalCoverageWarningType,
   HistoricalCardRole,
   HistoricalCardScoreRow,
+  HistoricalValidationMetricRow,
+  HistoricalValidationStatus,
+  HistoricalValidationWarningRow,
   HistoricalSourceCoverageRow,
   HistoricalSourceCoverageStatus,
   EcosystemDiversitySummaryRow,
@@ -169,6 +172,19 @@ export type HistoricalScoreInputRow = {
   readonly mainboardCopies: number;
   readonly sideboardCopies: number;
   readonly archetypeFamilies: readonly string[];
+};
+
+export type HistoricalValidationRunInput = {
+  readonly id: string;
+  readonly cubeRunId: string;
+  readonly pipelineRunId: string;
+  readonly status: HistoricalValidationStatus;
+  readonly config: unknown;
+};
+
+export type PersistedHistoricalValidationWarningRecord = HistoricalValidationWarningRow & {
+  readonly id: number;
+  readonly createdAt: string;
 };
 
 export type DedupeClusterInput = {
@@ -1661,6 +1677,224 @@ export function replaceCubeArchetypeReconstructionRows(
     database.exec("ROLLBACK;");
     throw error;
   }
+}
+
+export function listCubeArchetypeReconstructionRows(
+  database: DatabaseSync,
+  cubeRunId: string,
+  pipelineRunId: string
+): readonly CubeArchetypeReconstructionRow[] {
+  const rows = database
+    .prepare(
+      `SELECT
+        cube_run_id AS cubeRunId,
+        pipeline_run_id AS pipelineRunId,
+        period_id AS periodId,
+        archetype_family AS archetypeFamily,
+        reconstruction_score AS reconstructionScore,
+        total_importance AS totalImportance,
+        included_importance AS includedImportance,
+        total_targets AS totalTargets,
+        included_targets AS includedTargets,
+        missing_core_cards_json AS missingCoreCardsJson,
+        warnings_json AS warningsJson
+       FROM cube_archetype_reconstruction
+       WHERE cube_run_id = ? AND pipeline_run_id = ?
+       ORDER BY period_id, archetype_family`
+    )
+    .all(cubeRunId, pipelineRunId);
+
+  return rows.map((row) => ({
+    archetypeFamily: String(row.archetypeFamily),
+    cubeRunId: String(row.cubeRunId),
+    includedImportance: Number(row.includedImportance),
+    includedTargets: Number(row.includedTargets),
+    missingCoreCards: parseJsonArray(row.missingCoreCardsJson),
+    periodId: String(row.periodId),
+    pipelineRunId: String(row.pipelineRunId),
+    reconstructionScore: Number(row.reconstructionScore),
+    totalImportance: Number(row.totalImportance),
+    totalTargets: Number(row.totalTargets),
+    warnings: parseJsonArray(row.warningsJson)
+  }));
+}
+
+export function getEcosystemDiversitySummary(
+  database: DatabaseSync,
+  cubeRunId: string,
+  pipelineRunId: string
+): EcosystemDiversitySummaryRow | undefined {
+  const row = database
+    .prepare(
+      `SELECT
+        cube_run_id AS cubeRunId,
+        pipeline_run_id AS pipelineRunId,
+        archetypes_above_threshold AS archetypesAboveThreshold,
+        periods_represented AS periodsRepresented,
+        shared_card_efficiency AS sharedCardEfficiency,
+        summary_json AS summaryJson
+       FROM ecosystem_diversity_summaries
+       WHERE cube_run_id = ? AND pipeline_run_id = ?`
+    )
+    .get(cubeRunId, pipelineRunId);
+
+  if (!row) {
+    return undefined;
+  }
+
+  return {
+    archetypesAboveThreshold: Number(row.archetypesAboveThreshold),
+    cubeRunId: String(row.cubeRunId),
+    periodsRepresented: Number(row.periodsRepresented),
+    pipelineRunId: String(row.pipelineRunId),
+    sharedCardEfficiency: Number(row.sharedCardEfficiency),
+    summary: parseJson(String(row.summaryJson), {})
+  };
+}
+
+export function upsertHistoricalValidationRun(
+  database: DatabaseSync,
+  input: HistoricalValidationRunInput
+): void {
+  database
+    .prepare(
+      `INSERT INTO historical_validation_runs (
+        id, cube_run_id, pipeline_run_id, status, config_json, created_at
+      )
+      VALUES (?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        cube_run_id = excluded.cube_run_id,
+        pipeline_run_id = excluded.pipeline_run_id,
+        status = excluded.status,
+        config_json = excluded.config_json`
+    )
+    .run(input.id, input.cubeRunId, input.pipelineRunId, input.status, JSON.stringify(input.config), new Date().toISOString());
+}
+
+export function replaceHistoricalValidationRows(
+  database: DatabaseSync,
+  validationRunId: string,
+  metrics: readonly HistoricalValidationMetricRow[],
+  warnings: readonly HistoricalValidationWarningRow[]
+): void {
+  database.exec("BEGIN;");
+  try {
+    database.prepare("DELETE FROM historical_validation_metrics WHERE validation_run_id = ?").run(validationRunId);
+    database.prepare("DELETE FROM historical_validation_warnings WHERE validation_run_id = ?").run(validationRunId);
+
+    const insertMetric = database.prepare(
+      `INSERT INTO historical_validation_metrics (
+        validation_run_id, metric_key, label, value, metadata_json
+      )
+      VALUES (?, ?, ?, ?, ?)`
+    );
+    for (const metric of metrics) {
+      insertMetric.run(
+        metric.validationRunId,
+        metric.metricKey,
+        metric.label,
+        metric.value,
+        JSON.stringify(metric.metadata ?? {})
+      );
+    }
+
+    const insertWarning = database.prepare(
+      `INSERT INTO historical_validation_warnings (
+        validation_run_id, cube_run_id, pipeline_run_id, severity, code, message, metadata_json
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?)`
+    );
+    for (const warning of warnings) {
+      insertWarning.run(
+        warning.validationRunId,
+        warning.cubeRunId,
+        warning.pipelineRunId,
+        warning.severity,
+        warning.code,
+        warning.message,
+        JSON.stringify(warning.metadata ?? {})
+      );
+    }
+
+    database.exec("COMMIT;");
+  } catch (error) {
+    database.exec("ROLLBACK;");
+    throw error;
+  }
+}
+
+export function listHistoricalValidationMetrics(
+  database: DatabaseSync,
+  validationRunId: string
+): readonly HistoricalValidationMetricRow[] {
+  const rows = database
+    .prepare(
+      `SELECT validation_run_id AS validationRunId, metric_key AS metricKey, label, value, metadata_json AS metadataJson
+       FROM historical_validation_metrics
+       WHERE validation_run_id = ?
+       ORDER BY metric_key`
+    )
+    .all(validationRunId);
+
+  return rows.map((row) => ({
+    label: String(row.label),
+    metadata: parseJson(String(row.metadataJson), {}),
+    metricKey: String(row.metricKey),
+    validationRunId: String(row.validationRunId),
+    value: Number(row.value)
+  }));
+}
+
+export function listHistoricalValidationWarnings(
+  database: DatabaseSync,
+  validationRunId?: string
+): readonly PersistedHistoricalValidationWarningRecord[] {
+  const rows = validationRunId
+    ? database
+        .prepare(
+          `SELECT
+            id,
+            validation_run_id AS validationRunId,
+            cube_run_id AS cubeRunId,
+            pipeline_run_id AS pipelineRunId,
+            severity,
+            code,
+            message,
+            metadata_json AS metadataJson,
+            created_at AS createdAt
+           FROM historical_validation_warnings
+           WHERE validation_run_id = ?
+           ORDER BY severity DESC, code, id`
+        )
+        .all(validationRunId)
+    : database
+        .prepare(
+          `SELECT
+            id,
+            validation_run_id AS validationRunId,
+            cube_run_id AS cubeRunId,
+            pipeline_run_id AS pipelineRunId,
+            severity,
+            code,
+            message,
+            metadata_json AS metadataJson,
+            created_at AS createdAt
+           FROM historical_validation_warnings
+           ORDER BY validation_run_id, severity DESC, code, id`
+        )
+        .all();
+
+  return rows.map((row) => ({
+    code: String(row.code),
+    createdAt: String(row.createdAt),
+    cubeRunId: String(row.cubeRunId),
+    id: Number(row.id),
+    message: String(row.message),
+    metadata: parseJson(String(row.metadataJson), {}),
+    pipelineRunId: String(row.pipelineRunId),
+    severity: String(row.severity) === "fail" ? "fail" : "warn",
+    validationRunId: String(row.validationRunId)
+  }));
 }
 
 export function replaceCardArchetypeMatrixRows(

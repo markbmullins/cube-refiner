@@ -269,3 +269,23 @@ export type EcosystemDiversitySummaryRow = {
   readonly sharedCardEfficiency: number;
   readonly summary: unknown;
 };
+
+export type HistoricalValidationStatus = "pass" | "warn" | "fail";
+
+export type HistoricalValidationMetricRow = {
+  readonly validationRunId: string;
+  readonly metricKey: string;
+  readonly label: string;
+  readonly value: number;
+  readonly metadata?: unknown;
+};
+
+export type HistoricalValidationWarningRow = {
+  readonly validationRunId: string;
+  readonly cubeRunId: string;
+  readonly pipelineRunId: string;
+  readonly severity: "warn" | "fail";
+  readonly code: string;
+  readonly message: string;
+  readonly metadata?: unknown;
+};
