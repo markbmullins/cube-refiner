@@ -42,6 +42,8 @@ export type HistoricalPerArchetypeReconstructionConfig = {
   readonly periodIds?: readonly string[];
 };
 
+export type HistoricalCubeSection = "White" | "Blue" | "Black" | "Red" | "Green" | "Gold" | "Colorless" | "Lands";
+
 export type HistoricalPerSourcePolicy = {
   readonly allowArchiveDiscovery: boolean;
   readonly discoveryOptions: Readonly<Record<string, string>>;
@@ -119,9 +121,20 @@ export type HistoricalModernConfig = {
   readonly cubeGeneration: {
     readonly mode: "aggregate" | "historical";
     readonly totalCards: number;
+    readonly sectionTargets: Readonly<Record<HistoricalCubeSection, number>>;
+    readonly minimumFixing: number;
+    readonly minimumRemoval: number;
+    readonly minimumSweepers: number;
+    readonly minimumCounterspells: number;
+    readonly curveTargets: Readonly<Record<string, number>>;
     readonly minimumFormatPillars: number;
     readonly minimumArchetypeIcons: number;
     readonly minimumRepresentedPeriods: number;
+    readonly minimumEcosystemDiversityScore: number;
+    readonly minimumReconstructionScorePerArchetype: number;
+    readonly historicalScoreBlend: number;
+    readonly aggregateScoreBlend: number;
+    readonly selectedCardExplanationVerbosity: "brief" | "detailed";
   };
   readonly validation: {
     readonly minimumPeriodCoverage: number;
@@ -131,9 +144,16 @@ export type HistoricalModernConfig = {
     readonly maximumFlashInThePan: number;
     readonly minimumReconstructionScore: number;
     readonly minimumEcosystemDiversityScore: number;
+    readonly reportFormats: readonly ("csv" | "json")[];
   };
   readonly exports: {
     readonly outputDir: string;
+    readonly formats: {
+      readonly csv: boolean;
+      readonly cubeCobraText: boolean;
+    };
+    readonly registerArtifacts: boolean;
+    readonly artifactMetadata: Readonly<Record<string, string>>;
     readonly historicalSourceCoverageCsv: string;
     readonly cardPeriodMatrixCsv: string;
     readonly archetypePeriodCoverageCsv: string;
@@ -242,13 +262,25 @@ export function validateHistoricalModernConfig(value: unknown): HistoricalModern
       missingSourceWarningPolicy: requireMissingSourceWarningPolicy(coverage.missingSourceWarningPolicy, "coverage.missingSourceWarningPolicy")
     },
     cubeGeneration: {
+      aggregateScoreBlend: requireNumber(cubeGeneration.aggregateScoreBlend, "cubeGeneration.aggregateScoreBlend"),
+      curveTargets: requireNumberRecord(cubeGeneration.curveTargets, "cubeGeneration.curveTargets"),
+      historicalScoreBlend: requireNumber(cubeGeneration.historicalScoreBlend, "cubeGeneration.historicalScoreBlend"),
+      minimumCounterspells: requirePositiveInteger(cubeGeneration.minimumCounterspells, "cubeGeneration.minimumCounterspells"),
       minimumArchetypeIcons: requirePositiveInteger(cubeGeneration.minimumArchetypeIcons, "cubeGeneration.minimumArchetypeIcons"),
+      minimumEcosystemDiversityScore: requireNumber(cubeGeneration.minimumEcosystemDiversityScore, "cubeGeneration.minimumEcosystemDiversityScore"),
+      minimumFixing: requirePositiveInteger(cubeGeneration.minimumFixing, "cubeGeneration.minimumFixing"),
       minimumFormatPillars: requirePositiveInteger(cubeGeneration.minimumFormatPillars, "cubeGeneration.minimumFormatPillars"),
+      minimumReconstructionScorePerArchetype: requireNumber(cubeGeneration.minimumReconstructionScorePerArchetype, "cubeGeneration.minimumReconstructionScorePerArchetype"),
       minimumRepresentedPeriods: requirePositiveInteger(cubeGeneration.minimumRepresentedPeriods, "cubeGeneration.minimumRepresentedPeriods"),
+      minimumRemoval: requirePositiveInteger(cubeGeneration.minimumRemoval, "cubeGeneration.minimumRemoval"),
+      minimumSweepers: requirePositiveInteger(cubeGeneration.minimumSweepers, "cubeGeneration.minimumSweepers"),
       mode,
+      sectionTargets: requireSectionTargets(cubeGeneration.sectionTargets),
+      selectedCardExplanationVerbosity: requireStringUnion(cubeGeneration.selectedCardExplanationVerbosity, "cubeGeneration.selectedCardExplanationVerbosity", ["brief", "detailed"]),
       totalCards: requirePositiveInteger(cubeGeneration.totalCards, "cubeGeneration.totalCards")
     },
     exports: {
+      artifactMetadata: requireStringRecord(exportsConfig.artifactMetadata, "exports.artifactMetadata"),
       archetypeIconsCsv: requireString(exportsConfig.archetypeIconsCsv, "exports.archetypeIconsCsv"),
       archetypePeriodCoverageCsv: requireString(exportsConfig.archetypePeriodCoverageCsv, "exports.archetypePeriodCoverageCsv"),
       archetypeReconstructionCsv: requireString(exportsConfig.archetypeReconstructionCsv, "exports.archetypeReconstructionCsv"),
@@ -263,7 +295,9 @@ export function validateHistoricalModernConfig(value: unknown): HistoricalModern
       historicalPeriodCoverageCsv: requireString(exportsConfig.historicalPeriodCoverageCsv, "exports.historicalPeriodCoverageCsv"),
       historicalSourceCoverageCsv: requireString(exportsConfig.historicalSourceCoverageCsv, "exports.historicalSourceCoverageCsv"),
       historicalValidationCsv: requireString(exportsConfig.historicalValidationCsv, "exports.historicalValidationCsv"),
-      outputDir: requireString(exportsConfig.outputDir, "exports.outputDir")
+      formats: requireExportFormats(exportsConfig.formats),
+      outputDir: requireString(exportsConfig.outputDir, "exports.outputDir"),
+      registerArtifacts: requireBoolean(exportsConfig.registerArtifacts, "exports.registerArtifacts")
     },
     historical: {
       dateRange: parseHistoricalDateRange(requireRecord(historical.dateRange, "historical.dateRange")),
@@ -320,7 +354,8 @@ export function validateHistoricalModernConfig(value: unknown): HistoricalModern
       minimumEcosystemDiversityScore: requireNumber(validation.minimumEcosystemDiversityScore, "validation.minimumEcosystemDiversityScore"),
       minimumFormatPillars: requirePositiveInteger(validation.minimumFormatPillars, "validation.minimumFormatPillars"),
       minimumPeriodCoverage: requirePositiveInteger(validation.minimumPeriodCoverage, "validation.minimumPeriodCoverage"),
-      minimumReconstructionScore: requireNumber(validation.minimumReconstructionScore, "validation.minimumReconstructionScore")
+      minimumReconstructionScore: requireNumber(validation.minimumReconstructionScore, "validation.minimumReconstructionScore"),
+      reportFormats: requireArray(validation.reportFormats, "validation.reportFormats").map((format) => requireStringUnion(format, "validation.reportFormats[]", ["csv", "json"]))
     }
   };
 }
@@ -485,6 +520,28 @@ function requirePerArchetypeReconstruction(value: unknown): Readonly<Record<stri
 function requireNumberRecord(value: unknown, name: string): Readonly<Record<string, number>> {
   const record = requireRecord(value, name);
   return Object.fromEntries(Object.entries(record).map(([key, entry]) => [key, requireNumber(entry, `${name}.${key}`)]));
+}
+
+function requireSectionTargets(value: unknown): Readonly<Record<HistoricalCubeSection, number>> {
+  const record = requireRecord(value, "cubeGeneration.sectionTargets");
+  return {
+    Black: requirePositiveInteger(record.Black, "cubeGeneration.sectionTargets.Black"),
+    Blue: requirePositiveInteger(record.Blue, "cubeGeneration.sectionTargets.Blue"),
+    Colorless: requirePositiveInteger(record.Colorless, "cubeGeneration.sectionTargets.Colorless"),
+    Gold: requirePositiveInteger(record.Gold, "cubeGeneration.sectionTargets.Gold"),
+    Green: requirePositiveInteger(record.Green, "cubeGeneration.sectionTargets.Green"),
+    Lands: requirePositiveInteger(record.Lands, "cubeGeneration.sectionTargets.Lands"),
+    Red: requirePositiveInteger(record.Red, "cubeGeneration.sectionTargets.Red"),
+    White: requirePositiveInteger(record.White, "cubeGeneration.sectionTargets.White")
+  };
+}
+
+function requireExportFormats(value: unknown): { readonly csv: boolean; readonly cubeCobraText: boolean } {
+  const record = requireRecord(value, "exports.formats");
+  return {
+    csv: requireBoolean(record.csv, "exports.formats.csv"),
+    cubeCobraText: requireBoolean(record.cubeCobraText, "exports.formats.cubeCobraText")
+  };
 }
 
 function requirePerSourcePolicy(value: unknown): Readonly<Record<HistoricalCollectorSource, HistoricalPerSourcePolicy>> {

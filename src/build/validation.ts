@@ -37,6 +37,7 @@ export type CubeValidationConfig = {
 };
 
 export type ValidateCubeOptions = Partial<CubeValidationConfig> & {
+  readonly configHash?: string;
   readonly cubeRunId: string;
   readonly outputCsvPath?: string;
   readonly validationRunId?: string;
@@ -101,6 +102,7 @@ export function validateCube(database: DatabaseSync, options: ValidateCubeOption
 
   upsertValidationRun(database, {
     config,
+    configHash: options.configHash,
     cubeRunId: options.cubeRunId,
     id: validationRunId,
     status,

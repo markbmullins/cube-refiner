@@ -34,6 +34,7 @@ export type HistoricalCubeValidationConfig = {
 };
 
 export type ValidateHistoricalCubeOptions = Partial<HistoricalCubeValidationConfig> & {
+  readonly configHash?: string;
   readonly cubeRunId: string;
   readonly pipelineRunId: string;
   readonly validationRunId?: string;
@@ -81,6 +82,7 @@ export function validateHistoricalCube(
 
   upsertHistoricalValidationRun(database, {
     config,
+    configHash: options.configHash,
     cubeRunId: options.cubeRunId,
     id: validationRunId,
     pipelineRunId: options.pipelineRunId,
@@ -94,15 +96,15 @@ export function validateHistoricalCube(
       listHistoricalValidationMetrics(database, validationRunId),
       listHistoricalValidationWarnings(database, validationRunId)
     );
-    registerArtifact(database, options.pipelineRunId, options.historicalValidationCsvPath, "cube:validate:historical");
+    registerArtifact(database, options.pipelineRunId, options.historicalValidationCsvPath, "cube:validate:historical", options.configHash);
   }
   if (options.historicalPeriodCoverageCsvPath) {
     writePeriodCoverageCsv(options.historicalPeriodCoverageCsvPath, periodCoverage);
-    registerArtifact(database, options.pipelineRunId, options.historicalPeriodCoverageCsvPath, "cube:validate:historical");
+    registerArtifact(database, options.pipelineRunId, options.historicalPeriodCoverageCsvPath, "cube:validate:historical", options.configHash);
   }
   if (options.historicalArchetypeReconstructionCsvPath) {
     writeArchetypeReconstructionCsv(options.historicalArchetypeReconstructionCsvPath, reconstructionRows);
-    registerArtifact(database, options.pipelineRunId, options.historicalArchetypeReconstructionCsvPath, "cube:validate:historical");
+    registerArtifact(database, options.pipelineRunId, options.historicalArchetypeReconstructionCsvPath, "cube:validate:historical", options.configHash);
   }
 
   return {
@@ -283,13 +285,13 @@ function writeArchetypeReconstructionCsv(filePath: string, rows: readonly CubeAr
   );
 }
 
-function registerArtifact(database: DatabaseSync, pipelineRunId: string, filePath: string, stage: string): void {
+function registerArtifact(database: DatabaseSync, pipelineRunId: string, filePath: string, stage: string, configHash?: string): void {
   registerOutputArtifact(database, {
     contentHash: createHash("sha256").update(readFileSync(filePath)).digest("hex"),
     format: path.extname(filePath).replace(/^\./, "") || "csv",
     path: filePath,
     pipelineRunId,
-    sourceMetadata: { generatedBy: stage },
+    sourceMetadata: { configHash, generatedBy: stage },
     stage
   });
 }

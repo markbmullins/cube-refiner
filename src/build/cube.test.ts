@@ -138,6 +138,7 @@ describe("cube generator", () => {
     const outputCsvPath = path.join(mkdtempSync(path.join(os.tmpdir(), "cube-refiner-cube-")), "cube_360_candidate.csv");
 
     const summary = generateCube(database, {
+      configHash: "cube-config-hash",
       cubeRunId: "cube-test",
       outputCsvPath,
       pipelineRunId: "cube-test-run",
@@ -174,7 +175,8 @@ describe("cube generator", () => {
       { cardName: "Splinter Twin", position: 2, reason: expect.stringContaining("signpost") },
       { cardName: "Tarmogoyf", position: 3, reason: expect.stringContaining("role filler") }
     ]);
-    expect(database.prepare("SELECT total_cards AS totalCards FROM cube_runs WHERE id = ?").get("cube-test")).toEqual({
+    expect(database.prepare("SELECT config_hash AS configHash, total_cards AS totalCards FROM cube_runs WHERE id = ?").get("cube-test")).toEqual({
+      configHash: "cube-config-hash",
       totalCards: 4
     });
     expect(readFileSync(outputCsvPath, "utf8")).toContain("Lightning Bolt");

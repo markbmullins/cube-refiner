@@ -118,8 +118,27 @@ if (command === "pipeline:run") {
     },
     configHash: historicalConfig.configHash,
     configProfileName: getOptionValue("--profile"),
+    cubeGenerationOptions: {
+      configHash: historicalConfig.configHash,
+      minimumArchetypeIcons: historicalConfig.config.cubeGeneration.minimumArchetypeIcons,
+      minimumCounterspells: historicalConfig.config.cubeGeneration.minimumCounterspells,
+      minimumFormatPillars: historicalConfig.config.cubeGeneration.minimumFormatPillars,
+      minimumRemoval: historicalConfig.config.cubeGeneration.minimumRemoval,
+      minimumRepresentedPeriods: historicalConfig.config.cubeGeneration.minimumRepresentedPeriods,
+      minimumSweepers: historicalConfig.config.cubeGeneration.minimumSweepers,
+      mode: historicalConfig.config.cubeGeneration.mode,
+      outputCsvPath: csvExportsEnabled(historicalConfig.config) ? historicalConfig.config.exports.cubeCsv : undefined,
+      targets: historicalConfig.config.cubeGeneration.sectionTargets,
+      totalCards: parsePositiveInteger(getOptionValue("--total-cards")) ?? historicalConfig.config.cubeGeneration.totalCards
+    },
     databasePath,
     effectiveConfig: historicalConfig.config,
+    exportOptions: {
+      artifactMetadata: historicalConfig.config.exports.artifactMetadata,
+      cubeCobraText: historicalConfig.config.exports.formats.cubeCobraText,
+      csv: csvExportsEnabled(historicalConfig.config),
+      registerArtifacts: historicalConfig.config.exports.registerArtifacts
+    },
     fetchScryfall: args.includes("--fetch-scryfall"),
     outputDir: getOptionValue("--output-dir") ?? historicalConfig.config.exports.outputDir,
     pipelineRunId: getOptionValue("--pipeline-run-id"),
@@ -129,8 +148,11 @@ if (command === "pipeline:run") {
     skipCollect: args.includes("--skip-collect"),
     sourcePolicies: sourcePoliciesFromConfig(historicalConfig.config),
     sources: historicalConfig.config.sources.enabledSources,
-    totalCards: parsePositiveInteger(getOptionValue("--total-cards")),
     cubeRunId: getOptionValue("--cube-run-id"),
+    validationOptions: {
+      configHash: historicalConfig.configHash,
+      outputCsvPath: csvExportsEnabled(historicalConfig.config) ? `${historicalConfig.config.exports.outputDir}/cube_validation_report.csv` : undefined
+    },
     validationRunId: getOptionValue("--validation-run-id")
   });
 
@@ -529,13 +551,18 @@ if (command === "cube:generate") {
       saveEffectiveHistoricalConfig(database, historicalConfig.config, historicalConfig.configHash);
     }
     const summary = generateCube(database, {
+      configHash: historicalConfig?.configHash,
       cubeRunId: getOptionValue("--cube-run-id"),
+      minimumCounterspells: historicalConfig?.config.cubeGeneration.minimumCounterspells,
       minimumArchetypeIcons: parsePositiveInteger(getOptionValue("--min-archetype-icons")) ?? historicalConfig?.config.cubeGeneration.minimumArchetypeIcons,
       minimumFormatPillars: parsePositiveInteger(getOptionValue("--min-format-pillars")) ?? historicalConfig?.config.cubeGeneration.minimumFormatPillars,
+      minimumRemoval: historicalConfig?.config.cubeGeneration.minimumRemoval,
       minimumRepresentedPeriods: parsePositiveInteger(getOptionValue("--min-periods")) ?? historicalConfig?.config.cubeGeneration.minimumRepresentedPeriods,
+      minimumSweepers: historicalConfig?.config.cubeGeneration.minimumSweepers,
       mode: requestedMode ?? historicalConfig?.config.cubeGeneration.mode,
-      outputCsvPath: getOptionValue("--output-csv") ?? historicalConfig?.config.exports.cubeCsv ?? `${defaultProjectPaths.outputsDir}/cube_360_candidate.csv`,
+      outputCsvPath: getOptionValue("--output-csv") ?? (historicalConfig ? (csvExportsEnabled(historicalConfig.config) ? historicalConfig.config.exports.cubeCsv : undefined) : `${defaultProjectPaths.outputsDir}/cube_360_candidate.csv`),
       pipelineRunId,
+      targets: historicalConfig?.config.cubeGeneration.sectionTargets,
       totalCards: parsePositiveInteger(getOptionValue("--total-cards")) ?? historicalConfig?.config.cubeGeneration.totalCards
     });
     console.log(`Generated cube ${summary.cubeRunId} with ${summary.selectedCards} cards.`);
@@ -641,10 +668,11 @@ if (command === "cube:validate:historical") {
     const historicalConfig = loadCliHistoricalConfig(database);
     saveEffectiveHistoricalConfig(database, historicalConfig.config, historicalConfig.configHash);
     const summary = validateHistoricalCube(database, {
+      configHash: historicalConfig.configHash,
       cubeRunId,
-      historicalArchetypeReconstructionCsvPath: getOptionValue("--historical-reconstruction-csv") ?? historicalConfig.config.exports.historicalArchetypeReconstructionCsv,
-      historicalPeriodCoverageCsvPath: getOptionValue("--historical-period-csv") ?? historicalConfig.config.exports.historicalPeriodCoverageCsv,
-      historicalValidationCsvPath: getOptionValue("--historical-validation-csv") ?? historicalConfig.config.exports.historicalValidationCsv,
+      historicalArchetypeReconstructionCsvPath: getOptionValue("--historical-reconstruction-csv") ?? (csvExportsEnabled(historicalConfig.config) ? historicalConfig.config.exports.historicalArchetypeReconstructionCsv : undefined),
+      historicalPeriodCoverageCsvPath: getOptionValue("--historical-period-csv") ?? (csvExportsEnabled(historicalConfig.config) ? historicalConfig.config.exports.historicalPeriodCoverageCsv : undefined),
+      historicalValidationCsvPath: getOptionValue("--historical-validation-csv") ?? (csvExportsEnabled(historicalConfig.config) ? historicalConfig.config.exports.historicalValidationCsv : undefined),
       maximumFlashInThePan: parsePositiveInteger(getOptionValue("--max-flashes")) ?? historicalConfig.config.validation.maximumFlashInThePan,
       maximumPeriodCoverage: parsePositiveInteger(getOptionValue("--max-period-coverage")) ?? historicalConfig.config.validation.maximumPeriodCoverage,
       minimumEcosystemDiversityScore: parseNumberOption(getOptionValue("--min-ecosystem-diversity")) ?? historicalConfig.config.validation.minimumEcosystemDiversityScore,
@@ -958,6 +986,10 @@ function sourcePoliciesFromConfig(config: HistoricalModernConfig): Partial<Recor
       }
     ])
   );
+}
+
+function csvExportsEnabled(config: HistoricalModernConfig): boolean {
+  return config.exports.formats.csv && config.validation.reportFormats.includes("csv");
 }
 
 function hasHistoricalConfigInput(): boolean {

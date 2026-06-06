@@ -32,6 +32,7 @@ export type CubeGeneratorConfig = {
 };
 
 export type GenerateCubeOptions = Partial<CubeGeneratorConfig> & {
+  readonly configHash?: string;
   readonly cubeRunId?: string;
   readonly outputCsvPath?: string;
   readonly pipelineRunId: string;
@@ -102,6 +103,7 @@ export function generateCube(database: DatabaseSync, options: GenerateCubeOption
 
   upsertCubeRun(database, {
     config,
+    configHash: options.configHash,
     id: cubeRunId,
     pipelineRunId: options.pipelineRunId,
     totalCards: selected.length

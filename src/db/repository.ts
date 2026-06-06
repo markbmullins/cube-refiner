@@ -180,6 +180,7 @@ export type HistoricalValidationRunInput = {
   readonly pipelineRunId: string;
   readonly status: HistoricalValidationStatus;
   readonly config: unknown;
+  readonly configHash?: string;
 };
 
 export type PersistedHistoricalValidationWarningRecord = HistoricalValidationWarningRow & {
@@ -287,6 +288,7 @@ export type CubeRunInput = {
   readonly id: string;
   readonly pipelineRunId?: string;
   readonly config: unknown;
+  readonly configHash?: string;
   readonly createdAt?: string;
   readonly totalCards: number;
 };
@@ -303,6 +305,7 @@ export type ValidationRunInput = {
   readonly id: string;
   readonly cubeRunId: string;
   readonly config: unknown;
+  readonly configHash?: string;
   readonly createdAt?: string;
   readonly totalCards: number;
   readonly status: "pass" | "warn" | "fail";
@@ -1818,16 +1821,17 @@ export function upsertHistoricalValidationRun(
   database
     .prepare(
       `INSERT INTO historical_validation_runs (
-        id, cube_run_id, pipeline_run_id, status, config_json, created_at
+        id, cube_run_id, pipeline_run_id, status, config_hash, config_json, created_at
       )
-      VALUES (?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         cube_run_id = excluded.cube_run_id,
         pipeline_run_id = excluded.pipeline_run_id,
         status = excluded.status,
+        config_hash = excluded.config_hash,
         config_json = excluded.config_json`
     )
-    .run(input.id, input.cubeRunId, input.pipelineRunId, input.status, JSON.stringify(input.config), new Date().toISOString());
+    .run(input.id, input.cubeRunId, input.pipelineRunId, input.status, input.configHash ?? "", JSON.stringify(input.config), new Date().toISOString());
 }
 
 export function replaceHistoricalValidationRows(
@@ -2179,10 +2183,11 @@ export function listPersistedCandidatePoolCards(
 export function upsertCubeRun(database: DatabaseSync, input: CubeRunInput): void {
   database
     .prepare(
-      `INSERT INTO cube_runs (id, pipeline_run_id, config_json, created_at, total_cards)
-       VALUES (?, ?, ?, ?, ?)
+      `INSERT INTO cube_runs (id, pipeline_run_id, config_hash, config_json, created_at, total_cards)
+       VALUES (?, ?, ?, ?, ?, ?)
        ON CONFLICT(id) DO UPDATE SET
          pipeline_run_id = excluded.pipeline_run_id,
+         config_hash = excluded.config_hash,
          config_json = excluded.config_json,
          created_at = excluded.created_at,
          total_cards = excluded.total_cards`
@@ -2190,6 +2195,7 @@ export function upsertCubeRun(database: DatabaseSync, input: CubeRunInput): void
     .run(
       input.id,
       input.pipelineRunId ?? null,
+      input.configHash ?? "",
       JSON.stringify(input.config),
       input.createdAt ?? new Date().toISOString(),
       input.totalCards
@@ -2242,10 +2248,11 @@ export function listCubeRunCards(database: DatabaseSync, cubeRunId: string): rea
 export function upsertValidationRun(database: DatabaseSync, input: ValidationRunInput): void {
   database
     .prepare(
-      `INSERT INTO validation_runs (id, cube_run_id, config_json, created_at, total_cards, status)
-       VALUES (?, ?, ?, ?, ?, ?)
+      `INSERT INTO validation_runs (id, cube_run_id, config_hash, config_json, created_at, total_cards, status)
+       VALUES (?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(id) DO UPDATE SET
          cube_run_id = excluded.cube_run_id,
+         config_hash = excluded.config_hash,
          config_json = excluded.config_json,
          created_at = excluded.created_at,
          total_cards = excluded.total_cards,
@@ -2254,6 +2261,7 @@ export function upsertValidationRun(database: DatabaseSync, input: ValidationRun
     .run(
       input.id,
       input.cubeRunId,
+      input.configHash ?? "",
       JSON.stringify(input.config),
       input.createdAt ?? new Date().toISOString(),
       input.totalCards,

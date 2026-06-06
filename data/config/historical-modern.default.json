@@ -95,9 +95,29 @@
   "cubeGeneration": {
     "mode": "historical",
     "totalCards": 360,
+    "sectionTargets": {
+      "White": 45,
+      "Blue": 45,
+      "Black": 45,
+      "Red": 45,
+      "Green": 45,
+      "Gold": 45,
+      "Colorless": 35,
+      "Lands": 55
+    },
+    "minimumFixing": 30,
+    "minimumRemoval": 35,
+    "minimumSweepers": 6,
+    "minimumCounterspells": 12,
+    "curveTargets": {},
     "minimumFormatPillars": 24,
     "minimumArchetypeIcons": 24,
-    "minimumRepresentedPeriods": 12
+    "minimumRepresentedPeriods": 12,
+    "minimumEcosystemDiversityScore": 0.4,
+    "minimumReconstructionScorePerArchetype": 0.5,
+    "historicalScoreBlend": 1,
+    "aggregateScoreBlend": 0,
+    "selectedCardExplanationVerbosity": "detailed"
   },
   "validation": {
     "minimumPeriodCoverage": 2,
@@ -106,10 +126,19 @@
     "minimumArchetypeIcons": 20,
     "maximumFlashInThePan": 18,
     "minimumReconstructionScore": 0.5,
-    "minimumEcosystemDiversityScore": 0.4
+    "minimumEcosystemDiversityScore": 0.4,
+    "reportFormats": ["csv"]
   },
   "exports": {
     "outputDir": "data/outputs",
+    "formats": {
+      "csv": true,
+      "cubeCobraText": true
+    },
+    "registerArtifacts": true,
+    "artifactMetadata": {
+      "profile": "historical-modern-default"
+    },
     "historicalSourceCoverageCsv": "data/outputs/historical_source_coverage.csv",
     "cardPeriodMatrixCsv": "data/outputs/card_period_matrix.csv",
     "archetypePeriodCoverageCsv": "data/outputs/archetype_period_coverage.csv",

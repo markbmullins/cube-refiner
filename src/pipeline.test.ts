@@ -59,6 +59,57 @@ describe("full pipeline", () => {
     expect(configProfile).toEqual({ configHash: expect.any(String) });
     expect(cubeRow).toEqual({ totalCards: 4 });
   });
+
+  it("honors final export toggles and run config hashes", async () => {
+    const dir = mkdtempSync(path.join(os.tmpdir(), "cube-refiner-pipeline-exports-"));
+    const databasePath = path.join(dir, "pipeline.sqlite");
+    const outputDir = path.join(dir, "outputs");
+    database = openDatabase({ path: databasePath });
+    applyMigrations(database);
+    seedCards(database);
+    seedRawDecks(database);
+    database.close();
+    database = undefined;
+
+    const summary = await runFullPipeline({
+      configHash: "profile-hash",
+      cubeGenerationOptions: {
+        configHash: "profile-hash",
+        outputCsvPath: undefined,
+        totalCards: 3
+      },
+      databasePath,
+      exportOptions: {
+        cubeCobraText: false,
+        csv: false,
+        registerArtifacts: false
+      },
+      outputDir,
+      pipelineRunId: "pipeline-export-test",
+      skipCollect: true,
+      validationOptions: {
+        configHash: "profile-hash",
+        outputCsvPath: undefined
+      },
+      validationRunId: "validation-export-test"
+    });
+
+    expect(summary.artifactPaths).not.toContain(path.join(outputDir, "cube_360_candidate.csv"));
+    expect(summary.artifactPaths).not.toContain(path.join(outputDir, "cube_validation_report.csv"));
+    expect(summary.artifactPaths).not.toContain(path.join(outputDir, "cube_cobra_import.txt"));
+
+    database = openDatabase({ path: databasePath });
+    expect(database.prepare("SELECT config_hash AS configHash, total_cards AS totalCards FROM cube_runs WHERE id = ?").get(summary.cubeRunId)).toEqual({
+      configHash: "profile-hash",
+      totalCards: 3
+    });
+    expect(database.prepare("SELECT config_hash AS configHash FROM validation_runs WHERE id = ?").get("validation-export-test")).toEqual({
+      configHash: "profile-hash"
+    });
+    expect(database.prepare("SELECT COUNT(*) AS count FROM output_artifacts WHERE pipeline_run_id = ?").get("pipeline-export-test")).toEqual({
+      count: 0
+    });
+  });
 });
 
 function seedCards(database: DatabaseSync): void {

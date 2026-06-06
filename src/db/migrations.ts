@@ -558,6 +558,18 @@ ALTER TABLE ecosystem_diversity_summaries ADD COLUMN config_hash TEXT NOT NULL D
 CREATE INDEX IF NOT EXISTS idx_reconstruction_targets_config_hash ON archetype_reconstruction_targets(config_hash);
 CREATE INDEX IF NOT EXISTS idx_cube_reconstruction_config_hash ON cube_archetype_reconstruction(config_hash);
 `
+  },
+  {
+    description: "Cube and validation run config hashes",
+    id: "0014_cube_validation_config_hashes",
+    sql: `
+ALTER TABLE cube_runs ADD COLUMN config_hash TEXT NOT NULL DEFAULT '';
+ALTER TABLE validation_runs ADD COLUMN config_hash TEXT NOT NULL DEFAULT '';
+ALTER TABLE historical_validation_runs ADD COLUMN config_hash TEXT NOT NULL DEFAULT '';
+CREATE INDEX IF NOT EXISTS idx_cube_runs_config_hash ON cube_runs(config_hash);
+CREATE INDEX IF NOT EXISTS idx_validation_runs_config_hash ON validation_runs(config_hash);
+CREATE INDEX IF NOT EXISTS idx_historical_validation_runs_config_hash ON historical_validation_runs(config_hash);
+`
   }
 ];
 

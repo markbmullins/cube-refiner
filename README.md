@@ -284,7 +284,7 @@ pnpm cube:generate -- --pipeline-run-id <run-id>
 pnpm cube:generate -- --pipeline-run-id <run-id> --mode historical --min-format-pillars 24 --min-archetype-icons 24 --min-periods 12
 ```
 
-The cube generator stores a cube run, selected cards, roles, and reason fields in SQLite, then exports `data/outputs/cube_360_candidate.csv`.
+The cube generator stores a cube run, selected cards, roles, reason fields, and the effective config hash in SQLite, then exports `data/outputs/cube_360_candidate.csv` when CSV exports are enabled.
 
 Historical mode uses persisted `historical_card_scores` and reconstruction targets when available. It prioritizes format pillars, archetype icons, set-release coverage, and shared ecosystem glue before falling back to the aggregate cube constraints, and selected-card reasons include the historical role and reconstruction evidence.
 
@@ -312,7 +312,7 @@ pnpm dev -- cube:validate:historical --cube-run-id <cube-run-id> --pipeline-run-
 pnpm dev -- db:reviews --queue historical_validation
 ```
 
-Historical validation stores metrics and warnings for set-release period coverage, format pillar inclusion, archetype icon inclusion, reconstruction scores, ecosystem diversity, and flash-in-the-pan review counts. It exports `historical_cube_validation_report.csv`, `historical_period_coverage.csv`, and `historical_archetype_reconstruction.csv`, and registers those files in the artifact registry.
+Historical validation stores metrics, warnings, and the effective config hash for set-release period coverage, format pillar inclusion, archetype icon inclusion, reconstruction scores, ecosystem diversity, and flash-in-the-pan review counts. It exports `historical_cube_validation_report.csv`, `historical_period_coverage.csv`, and `historical_archetype_reconstruction.csv` when CSV exports are enabled, and registers those files in the artifact registry with config metadata when artifact registration is enabled.
 
 ## Shared Contracts
 

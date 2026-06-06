@@ -3,7 +3,7 @@ import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import type { DatabaseSync } from "node:sqlite";
 
-import { generateCandidatePools, generateCube, validateCube } from "./build/index.js";
+import { generateCandidatePools, generateCube, validateCube, type GenerateCubeOptions, type ValidateCubeOptions } from "./build/index.js";
 import type { CollectionDatePolicy, SourceCollectionPolicy } from "./collectors/index.js";
 import { runCollectors } from "./collectors/index.js";
 import { defaultProjectPaths } from "./config/paths.js";
@@ -43,9 +43,17 @@ export type RunFullPipelineOptions = {
   readonly collectionDatePolicy?: Partial<CollectionDatePolicy>;
   readonly configHash?: string;
   readonly configProfileName?: string;
+  readonly cubeGenerationOptions?: Partial<GenerateCubeOptions>;
   readonly effectiveConfig?: unknown;
+  readonly exportOptions?: {
+    readonly artifactMetadata?: unknown;
+    readonly cubeCobraText?: boolean;
+    readonly csv?: boolean;
+    readonly registerArtifacts?: boolean;
+  };
   readonly sourcePolicies?: Partial<Record<DeckSource, SourceCollectionPolicy>>;
   readonly sources?: readonly DeckSource[];
+  readonly validationOptions?: Partial<ValidateCubeOptions>;
 };
 
 export type RunFullPipelineSummary = {
@@ -203,10 +211,12 @@ export async function runFullPipeline(options: RunFullPipelineOptions = {}): Pro
 
     const cubeSummary = await runStage(database, pipelineRunId, "cube:generate", configHash, {}, () => {
       const summary = generateCube(database, {
+        ...options.cubeGenerationOptions,
+        configHash,
         cubeRunId: options.cubeRunId,
-        outputCsvPath: outputFile(outputDir, "cube_360_candidate.csv"),
+        outputCsvPath: options.cubeGenerationOptions?.outputCsvPath ?? (options.exportOptions?.csv === false ? undefined : outputFile(outputDir, "cube_360_candidate.csv")),
         pipelineRunId,
-        totalCards: options.totalCards
+        totalCards: options.totalCards ?? options.cubeGenerationOptions?.totalCards
       });
       artifactPaths.push(...compact([summary.outputCsvPath]));
       return {
@@ -218,8 +228,10 @@ export async function runFullPipeline(options: RunFullPipelineOptions = {}): Pro
 
     const validationSummary = await runStage(database, pipelineRunId, "cube:validate", configHash, { cubeRunId }, () => {
       const summary = validateCube(database, {
+        ...options.validationOptions,
+        configHash,
         cubeRunId,
-        outputCsvPath: outputFile(outputDir, "cube_validation_report.csv"),
+        outputCsvPath: options.validationOptions?.outputCsvPath ?? (options.exportOptions?.csv === false ? undefined : outputFile(outputDir, "cube_validation_report.csv")),
         validationRunId: options.validationRunId
       });
       artifactPaths.push(...compact([summary.outputCsvPath]));
@@ -230,21 +242,25 @@ export async function runFullPipeline(options: RunFullPipelineOptions = {}): Pro
     });
     const validationRunId = String(validationSummary.outputRefsValue("validationRunId"));
 
-    await runStage(database, pipelineRunId, "export:cube-cobra", configHash, { cubeRunId }, () => {
-      const summary = exportCubeCobra(database, {
-        cubeRunId,
-        outputPath: outputFile(outputDir, "cube_cobra_import.txt")
+    if (options.exportOptions?.cubeCobraText !== false) {
+      await runStage(database, pipelineRunId, "export:cube-cobra", configHash, { cubeRunId }, () => {
+        const summary = exportCubeCobra(database, {
+          cubeRunId,
+          outputPath: outputFile(outputDir, "cube_cobra_import.txt")
+        });
+        artifactPaths.push(summary.outputPath);
+        return {
+          outputRefs: summary,
+          rowCount: summary.cards
+        };
       });
-      artifactPaths.push(summary.outputPath);
-      return {
-        outputRefs: summary,
-        rowCount: summary.cards
-      };
-    });
+    }
 
     const uniqueArtifactPaths = [...new Set(artifactPaths)];
-    for (const filePath of uniqueArtifactPaths) {
-      registerArtifact(database, pipelineRunId, filePath);
+    if (options.exportOptions?.registerArtifacts !== false) {
+      for (const filePath of uniqueArtifactPaths) {
+        registerArtifact(database, pipelineRunId, filePath, configHash, options.exportOptions?.artifactMetadata);
+      }
     }
 
     upsertPipelineRun(database, {
@@ -324,7 +340,7 @@ async function runStage(
   }
 }
 
-function registerArtifact(database: DatabaseSync, pipelineRunId: string, filePath: string): void {
+function registerArtifact(database: DatabaseSync, pipelineRunId: string, filePath: string, configHash?: string, artifactMetadata?: unknown): void {
   if (!existsSync(filePath)) {
     return;
   }
@@ -334,7 +350,7 @@ function registerArtifact(database: DatabaseSync, pipelineRunId: string, filePat
     format: path.extname(filePath).replace(/^\./, "") || "text",
     path: filePath,
     pipelineRunId,
-    sourceMetadata: { generatedBy: "pipeline:run" },
+    sourceMetadata: { artifactMetadata, configHash, generatedBy: "pipeline:run" },
     stage: stageForArtifact(filePath)
   });
 }
