@@ -101,6 +101,17 @@ The Historical Modern workflow is intentionally different from a greatest-hits c
 
 The default active historical range is Modern's start on `2011-08-12` through April 2019, represented as inclusive end date `2019-04-30`. Collection and pipeline commands accept `--start-date YYYY-MM-DD` and `--end-date YYYY-MM-DD`; exact date filtering is authoritative even when lower-level `--years` or `--months` discovery hints are also provided. Parsed decks outside the range, with invalid dates, or with missing dates are excluded from active `raw_decks` and exposed in `db:reviews --queue collection_dates`.
 
+Historical Modern defaults are captured in `data/config/historical-modern.default.json`. Validate, inspect, and persist reproducible profiles with:
+
+```bash
+pnpm dev -- config:validate
+pnpm dev -- config:show --json
+pnpm dev -- config:save-profile --name historical-modern-v1 --config data/config/historical-modern.default.json
+pnpm dev -- db:configs
+```
+
+Historical stages accept `--config path` and `--profile name`; CLI flags still take precedence over profile values. Effective historical configs are saved in SQLite as `historical:latest`, and pipeline runs persist the effective config hash in run lineage tables.
+
 Run the historical stages in order:
 
 ```bash

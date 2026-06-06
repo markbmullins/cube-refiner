@@ -9,4 +9,5 @@ export * from "./periods.js";
 export * from "./scoring/index.js";
 export * from "./types/contracts.js";
 export * from "./config/historical.js";
+export * from "./config/historicalProfile.js";
 export * from "./config/paths.js";

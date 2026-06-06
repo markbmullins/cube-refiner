@@ -38,6 +38,9 @@ export type RunFullPipelineOptions = {
   readonly validationRunId?: string;
   readonly totalCards?: number;
   readonly collectorOptions?: Readonly<Record<string, string | undefined>>;
+  readonly configHash?: string;
+  readonly configProfileName?: string;
+  readonly effectiveConfig?: unknown;
 };
 
 export type RunFullPipelineSummary = {
@@ -68,7 +71,8 @@ export async function runFullPipeline(options: RunFullPipelineOptions = {}): Pro
     scryfallFile: options.scryfallFile,
     totalCards: options.totalCards
   };
-  const configHash = stableConfigHash(config);
+  const effectiveConfig = options.effectiveConfig ?? config;
+  const configHash = options.configHash ?? stableConfigHash(effectiveConfig);
   const artifactPaths: string[] = [];
 
   const database = openDatabase({ path: databasePath });
@@ -80,10 +84,17 @@ export async function runFullPipeline(options: RunFullPipelineOptions = {}): Pro
       status: "running"
     });
     upsertConfigProfile(database, {
-      config,
+      config: effectiveConfig,
       configHash,
       name: "pipeline:latest"
     });
+    if (options.configProfileName) {
+      upsertConfigProfile(database, {
+        config: effectiveConfig,
+        configHash,
+        name: options.configProfileName
+      });
+    }
 
     if (!options.skipCollect) {
       await runStage(database, pipelineRunId, "collect", configHash, {}, async () => {

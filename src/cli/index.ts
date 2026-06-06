@@ -2,18 +2,20 @@
 
 import { copyFileSync, existsSync, mkdirSync, rmSync } from "node:fs";
 import path from "node:path";
+import type { DatabaseSync } from "node:sqlite";
 
 import { evaluateCubeReconstruction, generateCandidatePools, generateCube, validateCube, validateHistoricalCube } from "../build/index.js";
 import { runCollectors } from "../collectors/index.js";
-import { defaultProjectPaths } from "../config/paths.js";
 import {
-  defaultHistoricalCoverageCsvPath,
-  defaultMinimumDecksPerPeriod,
-  defaultSourceCoverageManifestPath,
-  generateHistoricalCoverageReport
-} from "../coverage.js";
+  defaultHistoricalModernConfigPath,
+  loadHistoricalModernConfig,
+  type HistoricalModernConfig
+} from "../config/historicalProfile.js";
+import { defaultProjectPaths } from "../config/paths.js";
+import { generateHistoricalCoverageReport } from "../coverage.js";
 import {
   applyMigrations,
+  getConfigProfile,
   getDatabaseStatus,
   listConfigProfiles,
   listMetagamePeriods,
@@ -22,6 +24,7 @@ import {
   openDatabase,
   runIntegrityCheck
 } from "../db/index.js";
+import { upsertConfigProfile } from "../db/repository.js";
 import {
   dedupeDecks,
   fetchAndImportScryfallDefaultCards,
@@ -32,9 +35,6 @@ import {
 import { runFullPipeline } from "../pipeline.js";
 import {
   assignDecksToMetagamePeriods,
-  defaultHistoricalEndDate,
-  defaultHistoricalStartDate,
-  defaultSetReleaseCalendarPath,
   generateAndPersistMetagamePeriods,
   parseMetagamePeriodModel,
   seedSetReleases
@@ -64,6 +64,9 @@ Usage:
   cube-refiner db:reviews [--db path] [--queue name] [--json]
   cube-refiner db:artifacts [--db path] [--pipeline-run-id id] [--json]
   cube-refiner db:configs [--db path] [--json]
+  cube-refiner config:validate [--config path] [--profile name] [--db path]
+  cube-refiner config:show [--config path] [--profile name] [--db path] [--json]
+  cube-refiner config:save-profile --name name [--config path] [--profile name] [--db path]
   cube-refiner db:backup [--db path] [--output path]
   cube-refiner db:check [--db path] [--json]
   cube-refiner db:vacuum [--db path]
@@ -100,19 +103,23 @@ Project paths:
 }
 
 if (command === "pipeline:run") {
+  const historicalConfig = loadCliHistoricalConfig();
   const summary = await runFullPipeline({
     collectorOptions: {
       limitDecks: getOptionValue("--limit-decks"),
       limitEvents: getOptionValue("--limit-events"),
       events: getOptionValue("--events"),
-      endDate: getOptionValue("--end-date"),
+      endDate: getOptionValue("--end-date") ?? historicalConfig.config.historical.dateRange.endDate,
       months: getOptionValue("--months"),
-      startDate: getOptionValue("--start-date"),
+      startDate: getOptionValue("--start-date") ?? historicalConfig.config.historical.dateRange.startDate,
       years: getOptionValue("--years")
     },
+    configHash: historicalConfig.configHash,
+    configProfileName: getOptionValue("--profile"),
     databasePath,
+    effectiveConfig: historicalConfig.config,
     fetchScryfall: args.includes("--fetch-scryfall"),
-    outputDir: getOptionValue("--output-dir") ?? defaultProjectPaths.outputsDir,
+    outputDir: getOptionValue("--output-dir") ?? historicalConfig.config.exports.outputDir,
     pipelineRunId: getOptionValue("--pipeline-run-id"),
     rawDataDir,
     refresh,
@@ -139,14 +146,15 @@ if (command.startsWith("collect:")) {
     process.exit(1);
   }
 
+  const historicalConfig = loadCliHistoricalConfig();
   const summaries = await runCollectors({
     collectorOptions: {
       limitDecks: getOptionValue("--limit-decks"),
       limitEvents: getOptionValue("--limit-events"),
       events: getOptionValue("--events"),
-      endDate: getOptionValue("--end-date"),
+      endDate: getOptionValue("--end-date") ?? historicalConfig.config.historical.dateRange.endDate,
       months: getOptionValue("--months"),
-      startDate: getOptionValue("--start-date"),
+      startDate: getOptionValue("--start-date") ?? historicalConfig.config.historical.dateRange.startDate,
       years: getOptionValue("--years")
     },
     databasePath,
@@ -242,7 +250,8 @@ if (command === "periods:seed") {
   const database = openDatabase({ path: databasePath });
   try {
     applyMigrations(database);
-    const setReleasesFile = getOptionValue("--set-releases-file") ?? defaultSetReleaseCalendarPath;
+    const historicalConfig = loadCliHistoricalConfig(database);
+    const setReleasesFile = getOptionValue("--set-releases-file") ?? historicalConfig.config.setReleaseCalendar.path;
     const seeded = seedSetReleases(database, { setReleasesFile });
     console.log(`Seeded ${seeded} Standard set releases from ${setReleasesFile}.`);
   } finally {
@@ -255,12 +264,13 @@ if (command === "periods:generate") {
   const database = openDatabase({ path: databasePath });
   try {
     applyMigrations(database);
-    const setReleasesFile = getOptionValue("--set-releases-file") ?? defaultSetReleaseCalendarPath;
+    const historicalConfig = loadCliHistoricalConfig(database);
+    const setReleasesFile = getOptionValue("--set-releases-file") ?? historicalConfig.config.setReleaseCalendar.path;
     const seeded = seedSetReleases(database, { setReleasesFile });
     const summary = generateAndPersistMetagamePeriods(database, {
-      endDate: getOptionValue("--end-date") ?? defaultHistoricalEndDate,
+      endDate: getOptionValue("--end-date") ?? historicalConfig.config.historical.dateRange.endDate,
       model: parseMetagamePeriodModel(getOptionValue("--model")),
-      startDate: getOptionValue("--start-date") ?? defaultHistoricalStartDate
+      startDate: getOptionValue("--start-date") ?? historicalConfig.config.historical.dateRange.startDate
     });
     console.log(`Seeded ${seeded} Standard set releases from ${setReleasesFile}.`);
     console.log(
@@ -307,11 +317,13 @@ if (command === "coverage:historical") {
   const database = openDatabase({ path: databasePath });
   try {
     applyMigrations(database);
+    const historicalConfig = loadCliHistoricalConfig(database);
+    saveEffectiveHistoricalConfig(database, historicalConfig.config, historicalConfig.configHash);
     const summary = generateHistoricalCoverageReport(database, {
-      minimumDecksPerPeriod: parsePositiveInteger(getOptionValue("--min-decks")) ?? defaultMinimumDecksPerPeriod,
-      outputCsvPath: getOptionValue("--output-csv") ?? defaultHistoricalCoverageCsvPath,
+      minimumDecksPerPeriod: parsePositiveInteger(getOptionValue("--min-decks")) ?? historicalConfig.config.coverage.minimumDecksPerPeriod,
+      outputCsvPath: getOptionValue("--output-csv") ?? historicalConfig.config.exports.historicalSourceCoverageCsv,
       pipelineRunId: getOptionValue("--pipeline-run-id"),
-      sourceManifestPath: getOptionValue("--source-manifest") ?? defaultSourceCoverageManifestPath
+      sourceManifestPath: getOptionValue("--source-manifest") ?? historicalConfig.config.sources.sourceCoverageManifestPath
     });
     console.log(
       `Generated historical source coverage for run ${summary.pipelineRunId}: ${summary.rows} rows, ${summary.warnings} warnings.`
@@ -356,9 +368,12 @@ if (command === "matrix:periods") {
   const database = openDatabase({ path: databasePath });
   try {
     applyMigrations(database);
+    const historicalConfig = loadCliHistoricalConfig(database);
+    saveEffectiveHistoricalConfig(database, historicalConfig.config, historicalConfig.configHash);
     const summary = buildPeriodMatrices(database, {
-      archetypePeriodCoverageCsvPath: getOptionValue("--archetype-period-csv") ?? `${defaultProjectPaths.outputsDir}/archetype_period_coverage.csv`,
-      cardPeriodMatrixCsvPath: getOptionValue("--card-period-csv") ?? `${defaultProjectPaths.outputsDir}/card_period_matrix.csv`,
+      archetypePeriodCoverageCsvPath: getOptionValue("--archetype-period-csv") ?? historicalConfig.config.exports.archetypePeriodCoverageCsv,
+      cardPeriodMatrixCsvPath: getOptionValue("--card-period-csv") ?? historicalConfig.config.exports.cardPeriodMatrixCsv,
+      configHash: historicalConfig.configHash,
       pipelineRunId: getOptionValue("--pipeline-run-id")
     });
     console.log(
@@ -418,26 +433,29 @@ if (command === "score:historical") {
   const database = openDatabase({ path: databasePath });
   try {
     applyMigrations(database);
+    const historicalConfig = loadCliHistoricalConfig(database);
+    saveEffectiveHistoricalConfig(database, historicalConfig.config, historicalConfig.configHash);
     const summary = scoreHistoricalCards(database, {
       aggregatePipelineRunId: getOptionValue("--aggregate-pipeline-run-id"),
-      archetypeIconsCsvPath: getOptionValue("--archetype-icons-csv") ?? `${defaultProjectPaths.outputsDir}/archetype_icons.csv`,
-      flashInPanReviewCsvPath: getOptionValue("--flash-review-csv") ?? `${defaultProjectPaths.outputsDir}/flash_in_pan_review.csv`,
-      formatPillarsCsvPath: getOptionValue("--format-pillars-csv") ?? `${defaultProjectPaths.outputsDir}/format_pillars.csv`,
-      historicalCardsRankedCsvPath: getOptionValue("--historical-cards-ranked-csv") ?? `${defaultProjectPaths.outputsDir}/historical_cards_ranked.csv`,
+      archetypeIconsCsvPath: getOptionValue("--archetype-icons-csv") ?? historicalConfig.config.exports.archetypeIconsCsv,
+      configHash: historicalConfig.configHash,
+      flashInPanReviewCsvPath: getOptionValue("--flash-review-csv") ?? historicalConfig.config.exports.flashInPanReviewCsv,
+      formatPillarsCsvPath: getOptionValue("--format-pillars-csv") ?? historicalConfig.config.exports.formatPillarsCsv,
+      historicalCardsRankedCsvPath: getOptionValue("--historical-cards-ranked-csv") ?? historicalConfig.config.exports.historicalCardsRankedCsv,
       pipelineRunId,
       thresholds: {
-        eraShare: parseNumberOption(getOptionValue("--era-share")) ?? 0.05,
-        flashMaxLongevity: parseNumberOption(getOptionValue("--flash-max-longevity")) ?? 0.25,
-        flashPeak: parseNumberOption(getOptionValue("--flash-peak")) ?? 0.25,
-        iconPeak: parseNumberOption(getOptionValue("--icon-peak")) ?? 0.18,
-        pillarLongevity: parseNumberOption(getOptionValue("--pillar-longevity")) ?? 0.5,
-        pillarPeak: parseNumberOption(getOptionValue("--pillar-peak")) ?? 0.08
+        eraShare: parseNumberOption(getOptionValue("--era-share")) ?? historicalConfig.config.scoring.thresholds.eraShare,
+        flashMaxLongevity: parseNumberOption(getOptionValue("--flash-max-longevity")) ?? historicalConfig.config.scoring.thresholds.flashMaxLongevity,
+        flashPeak: parseNumberOption(getOptionValue("--flash-peak")) ?? historicalConfig.config.scoring.thresholds.flashPeak,
+        iconPeak: parseNumberOption(getOptionValue("--icon-peak")) ?? historicalConfig.config.scoring.thresholds.iconPeak,
+        pillarLongevity: parseNumberOption(getOptionValue("--pillar-longevity")) ?? historicalConfig.config.scoring.thresholds.pillarLongevity,
+        pillarPeak: parseNumberOption(getOptionValue("--pillar-peak")) ?? historicalConfig.config.scoring.thresholds.pillarPeak
       },
       weights: {
-        archetypeImportance: parseNumberOption(getOptionValue("--weight-archetype")) ?? 0.15,
-        glue: parseNumberOption(getOptionValue("--weight-glue")) ?? 0.2,
-        longevity: parseNumberOption(getOptionValue("--weight-longevity")) ?? 0.35,
-        peak: parseNumberOption(getOptionValue("--weight-peak")) ?? 0.3
+        archetypeImportance: parseNumberOption(getOptionValue("--weight-archetype")) ?? historicalConfig.config.scoring.weights.archetypeImportance,
+        glue: parseNumberOption(getOptionValue("--weight-glue")) ?? historicalConfig.config.scoring.weights.glue,
+        longevity: parseNumberOption(getOptionValue("--weight-longevity")) ?? historicalConfig.config.scoring.weights.longevity,
+        peak: parseNumberOption(getOptionValue("--weight-peak")) ?? historicalConfig.config.scoring.weights.peak
       }
     });
     console.log(`Scored ${summary.scoreRows} historical cards for run ${summary.pipelineRunId}.`);
@@ -490,15 +508,21 @@ if (command === "cube:generate") {
   const database = openDatabase({ path: databasePath });
   try {
     applyMigrations(database);
+    const requestedMode = parseCubeMode(getOptionValue("--mode"));
+    const useHistoricalConfig = requestedMode === "historical" || hasHistoricalConfigInput();
+    const historicalConfig = useHistoricalConfig ? loadCliHistoricalConfig(database) : undefined;
+    if (historicalConfig) {
+      saveEffectiveHistoricalConfig(database, historicalConfig.config, historicalConfig.configHash);
+    }
     const summary = generateCube(database, {
       cubeRunId: getOptionValue("--cube-run-id"),
-      minimumArchetypeIcons: parsePositiveInteger(getOptionValue("--min-archetype-icons")),
-      minimumFormatPillars: parsePositiveInteger(getOptionValue("--min-format-pillars")),
-      minimumRepresentedPeriods: parsePositiveInteger(getOptionValue("--min-periods")),
-      mode: parseCubeMode(getOptionValue("--mode")),
-      outputCsvPath: getOptionValue("--output-csv") ?? `${defaultProjectPaths.outputsDir}/cube_360_candidate.csv`,
+      minimumArchetypeIcons: parsePositiveInteger(getOptionValue("--min-archetype-icons")) ?? historicalConfig?.config.cubeGeneration.minimumArchetypeIcons,
+      minimumFormatPillars: parsePositiveInteger(getOptionValue("--min-format-pillars")) ?? historicalConfig?.config.cubeGeneration.minimumFormatPillars,
+      minimumRepresentedPeriods: parsePositiveInteger(getOptionValue("--min-periods")) ?? historicalConfig?.config.cubeGeneration.minimumRepresentedPeriods,
+      mode: requestedMode ?? historicalConfig?.config.cubeGeneration.mode,
+      outputCsvPath: getOptionValue("--output-csv") ?? historicalConfig?.config.exports.cubeCsv ?? `${defaultProjectPaths.outputsDir}/cube_360_candidate.csv`,
       pipelineRunId,
-      totalCards: parsePositiveInteger(getOptionValue("--total-cards"))
+      totalCards: parsePositiveInteger(getOptionValue("--total-cards")) ?? historicalConfig?.config.cubeGeneration.totalCards
     });
     console.log(`Generated cube ${summary.cubeRunId} with ${summary.selectedCards} cards.`);
     if (summary.outputCsvPath) {
@@ -521,16 +545,18 @@ if (command === "cube:reconstruct") {
   const database = openDatabase({ path: databasePath });
   try {
     applyMigrations(database);
+    const historicalConfig = loadCliHistoricalConfig(database);
+    saveEffectiveHistoricalConfig(database, historicalConfig.config, historicalConfig.configHash);
     const summary = evaluateCubeReconstruction(database, {
-      archetypeReconstructionCsvPath: getOptionValue("--reconstruction-csv") ?? `${defaultProjectPaths.outputsDir}/archetype_reconstruction.csv`,
-      coreShare: parseNumberOption(getOptionValue("--core-share")),
+      archetypeReconstructionCsvPath: getOptionValue("--reconstruction-csv") ?? historicalConfig.config.exports.archetypeReconstructionCsv,
+      coreShare: parseNumberOption(getOptionValue("--core-share")) ?? historicalConfig.config.archetypeReconstruction.coreShare,
       cubeRunId,
-      ecosystemDiversityCsvPath: getOptionValue("--ecosystem-csv") ?? `${defaultProjectPaths.outputsDir}/ecosystem_diversity_report.csv`,
-      eraCoverageCsvPath: getOptionValue("--era-coverage-csv") ?? `${defaultProjectPaths.outputsDir}/era_coverage.csv`,
+      ecosystemDiversityCsvPath: getOptionValue("--ecosystem-csv") ?? historicalConfig.config.exports.ecosystemDiversityCsv,
+      eraCoverageCsvPath: getOptionValue("--era-coverage-csv") ?? historicalConfig.config.exports.eraCoverageCsv,
       pipelineRunId,
-      reconstructionThreshold: parseNumberOption(getOptionValue("--reconstruction-threshold")),
-      signpostShare: parseNumberOption(getOptionValue("--signpost-share")),
-      supportShare: parseNumberOption(getOptionValue("--support-share"))
+      reconstructionThreshold: parseNumberOption(getOptionValue("--reconstruction-threshold")) ?? historicalConfig.config.archetypeReconstruction.reconstructionThreshold,
+      signpostShare: parseNumberOption(getOptionValue("--signpost-share")) ?? historicalConfig.config.archetypeReconstruction.signpostShare,
+      supportShare: parseNumberOption(getOptionValue("--support-share")) ?? historicalConfig.config.archetypeReconstruction.supportShare
     });
     console.log(
       `Evaluated cube ${summary.cubeRunId}: ${summary.reconstructionRows} archetype/period rows, ${summary.targets} targets.`
@@ -590,16 +616,18 @@ if (command === "cube:validate:historical") {
   const database = openDatabase({ path: databasePath });
   try {
     applyMigrations(database);
+    const historicalConfig = loadCliHistoricalConfig(database);
+    saveEffectiveHistoricalConfig(database, historicalConfig.config, historicalConfig.configHash);
     const summary = validateHistoricalCube(database, {
       cubeRunId,
-      historicalArchetypeReconstructionCsvPath: getOptionValue("--historical-reconstruction-csv") ?? `${defaultProjectPaths.outputsDir}/historical_archetype_reconstruction.csv`,
-      historicalPeriodCoverageCsvPath: getOptionValue("--historical-period-csv") ?? `${defaultProjectPaths.outputsDir}/historical_period_coverage.csv`,
-      historicalValidationCsvPath: getOptionValue("--historical-validation-csv") ?? `${defaultProjectPaths.outputsDir}/historical_cube_validation_report.csv`,
-      maximumFlashInThePan: parsePositiveInteger(getOptionValue("--max-flashes")),
-      maximumPeriodCoverage: parsePositiveInteger(getOptionValue("--max-period-coverage")),
-      minimumEcosystemDiversityScore: parseNumberOption(getOptionValue("--min-ecosystem-diversity")),
-      minimumPeriodCoverage: parsePositiveInteger(getOptionValue("--min-period-coverage")),
-      minimumReconstructionScore: parseNumberOption(getOptionValue("--min-reconstruction-score")),
+      historicalArchetypeReconstructionCsvPath: getOptionValue("--historical-reconstruction-csv") ?? historicalConfig.config.exports.historicalArchetypeReconstructionCsv,
+      historicalPeriodCoverageCsvPath: getOptionValue("--historical-period-csv") ?? historicalConfig.config.exports.historicalPeriodCoverageCsv,
+      historicalValidationCsvPath: getOptionValue("--historical-validation-csv") ?? historicalConfig.config.exports.historicalValidationCsv,
+      maximumFlashInThePan: parsePositiveInteger(getOptionValue("--max-flashes")) ?? historicalConfig.config.validation.maximumFlashInThePan,
+      maximumPeriodCoverage: parsePositiveInteger(getOptionValue("--max-period-coverage")) ?? historicalConfig.config.validation.maximumPeriodCoverage,
+      minimumEcosystemDiversityScore: parseNumberOption(getOptionValue("--min-ecosystem-diversity")) ?? historicalConfig.config.validation.minimumEcosystemDiversityScore,
+      minimumPeriodCoverage: parsePositiveInteger(getOptionValue("--min-period-coverage")) ?? historicalConfig.config.validation.minimumPeriodCoverage,
+      minimumReconstructionScore: parseNumberOption(getOptionValue("--min-reconstruction-score")) ?? historicalConfig.config.validation.minimumReconstructionScore,
       pipelineRunId,
       validationRunId: getOptionValue("--validation-run-id")
     });
@@ -714,6 +742,50 @@ if (command === "db:configs") {
   process.exit(0);
 }
 
+if (command === "config:validate") {
+  const loaded = loadCliHistoricalConfig();
+  console.log(`Historical config valid: ${getOptionValue("--config") ?? defaultHistoricalModernConfigPath}`);
+  console.log(`Config hash: ${loaded.configHash}`);
+  process.exit(0);
+}
+
+if (command === "config:show") {
+  const loaded = loadCliHistoricalConfig();
+  if (args.includes("--json")) {
+    console.log(JSON.stringify({ config: loaded.config, configHash: loaded.configHash }, null, 2));
+  } else {
+    console.log(`${loaded.config.project.name}: ${loaded.configHash}`);
+    console.log(`Range: ${loaded.config.historical.dateRange.startDate}..${loaded.config.historical.dateRange.endDate}`);
+    console.log(`Period model: ${loaded.config.historical.periodModel}`);
+    console.log(`Collectors: ${loaded.config.sources.collectors.join(", ")}`);
+    console.log(`Output dir: ${loaded.config.exports.outputDir}`);
+  }
+  process.exit(0);
+}
+
+if (command === "config:save-profile") {
+  const name = getOptionValue("--name");
+  if (!name) {
+    console.error("config:save-profile requires --name.");
+    process.exit(1);
+  }
+
+  const database = openDatabase({ path: databasePath });
+  try {
+    applyMigrations(database);
+    const loaded = loadCliHistoricalConfig(database);
+    upsertConfigProfile(database, {
+      config: loaded.config,
+      configHash: loaded.configHash,
+      name
+    });
+    console.log(`Saved config profile ${name}: ${loaded.configHash}`);
+  } finally {
+    database.close();
+  }
+  process.exit(0);
+}
+
 if (command === "db:backup") {
   const outputPath = getOptionValue("--output") ?? defaultBackupPath(databasePath);
   backupDatabaseFiles(databasePath, outputPath);
@@ -788,6 +860,65 @@ if (command === "db:reset") {
 
 console.error(`Unknown command: ${command}`);
 process.exit(1);
+
+function loadCliHistoricalConfig(database?: DatabaseSync): { readonly config: HistoricalModernConfig; readonly configHash: string } {
+  const profileName = getOptionValue("--profile");
+  if (!profileName || database) {
+    const loaded = loadHistoricalModernConfig({
+      configPath: getOptionValue("--config"),
+      overrides: {
+        dateRange: {
+          endDate: getOptionValue("--end-date"),
+          startDate: getOptionValue("--start-date")
+        },
+        outputDir: getOptionValue("--output-dir")
+      },
+      profileConfig: profileName ? loadProfileConfig(database, profileName) : undefined
+    });
+    return loaded;
+  }
+
+  const profileDatabase = openDatabase({ path: databasePath });
+  try {
+    applyMigrations(profileDatabase);
+    return loadHistoricalModernConfig({
+      configPath: getOptionValue("--config"),
+      overrides: {
+        dateRange: {
+          endDate: getOptionValue("--end-date"),
+          startDate: getOptionValue("--start-date")
+        },
+        outputDir: getOptionValue("--output-dir")
+      },
+      profileConfig: loadProfileConfig(profileDatabase, profileName)
+    });
+  } finally {
+    profileDatabase.close();
+  }
+}
+
+function loadProfileConfig(database: DatabaseSync | undefined, profileName: string): unknown {
+  if (!database) {
+    throw new Error(`Config profile ${profileName} requires an open database.`);
+  }
+  const profile = getConfigProfile(database, profileName);
+  if (!profile) {
+    throw new Error(`Config profile not found: ${profileName}`);
+  }
+  return profile.config;
+}
+
+function saveEffectiveHistoricalConfig(database: DatabaseSync, config: HistoricalModernConfig, configHash: string): void {
+  upsertConfigProfile(database, {
+    config,
+    configHash,
+    name: "historical:latest"
+  });
+}
+
+function hasHistoricalConfigInput(): boolean {
+  return getOptionValue("--config") !== undefined || getOptionValue("--profile") !== undefined;
+}
 
 function getOptionValue(name: string): string | undefined {
   const index = args.indexOf(name);

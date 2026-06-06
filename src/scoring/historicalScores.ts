@@ -38,6 +38,7 @@ export type HistoricalScoreConfig = {
 export type ScoreHistoricalCardsOptions = Partial<HistoricalScoreConfig> & {
   readonly pipelineRunId: string;
   readonly aggregatePipelineRunId?: string;
+  readonly configHash?: string;
   readonly historicalCardsRankedCsvPath?: string;
   readonly formatPillarsCsvPath?: string;
   readonly archetypeIconsCsvPath?: string;
@@ -89,7 +90,7 @@ export function scoreHistoricalCards(
 
   upsertPipelineRun(database, {
     completedAt: new Date().toISOString(),
-    configHash: stableConfigHash({ aggregatePipelineRunId, config, stage: "score:historical" }),
+    configHash: options.configHash ?? stableConfigHash({ aggregatePipelineRunId, config, stage: "score:historical" }),
     id: options.pipelineRunId,
     status: "completed"
   });

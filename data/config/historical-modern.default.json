@@ -1,0 +1,79 @@
+{
+  "project": {
+    "name": "Historical Modern Cube"
+  },
+  "historical": {
+    "dateRange": {
+      "startDate": "2011-08-12",
+      "endDate": "2019-04-30"
+    },
+    "periodModel": "standard_set_release"
+  },
+  "sources": {
+    "collectors": ["mtgtop8", "mtgo", "mtggoldfish"],
+    "datePolicy": "event_date_required",
+    "minimumDecksPerPeriod": 8,
+    "sourceCoverageManifestPath": "data/source-coverage-manifest.json"
+  },
+  "setReleaseCalendar": {
+    "path": "data/standard-set-releases.json"
+  },
+  "coverage": {
+    "minimumDecksPerPeriod": 8
+  },
+  "scoring": {
+    "thresholds": {
+      "eraShare": 0.05,
+      "pillarLongevity": 0.5,
+      "pillarPeak": 0.08,
+      "iconPeak": 0.18,
+      "flashPeak": 0.25,
+      "flashMaxLongevity": 0.25
+    },
+    "weights": {
+      "glue": 0.2,
+      "longevity": 0.35,
+      "peak": 0.3,
+      "archetypeImportance": 0.15
+    }
+  },
+  "archetypeReconstruction": {
+    "coreShare": 0.2,
+    "supportShare": 0.08,
+    "signpostShare": 0.15,
+    "reconstructionThreshold": 0.5
+  },
+  "cubeGeneration": {
+    "mode": "historical",
+    "totalCards": 360,
+    "minimumFormatPillars": 24,
+    "minimumArchetypeIcons": 24,
+    "minimumRepresentedPeriods": 12
+  },
+  "validation": {
+    "minimumPeriodCoverage": 2,
+    "maximumPeriodCoverage": 80,
+    "minimumFormatPillars": 20,
+    "minimumArchetypeIcons": 20,
+    "maximumFlashInThePan": 18,
+    "minimumReconstructionScore": 0.5,
+    "minimumEcosystemDiversityScore": 0.4
+  },
+  "exports": {
+    "outputDir": "data/outputs",
+    "historicalSourceCoverageCsv": "data/outputs/historical_source_coverage.csv",
+    "cardPeriodMatrixCsv": "data/outputs/card_period_matrix.csv",
+    "archetypePeriodCoverageCsv": "data/outputs/archetype_period_coverage.csv",
+    "historicalCardsRankedCsv": "data/outputs/historical_cards_ranked.csv",
+    "formatPillarsCsv": "data/outputs/format_pillars.csv",
+    "archetypeIconsCsv": "data/outputs/archetype_icons.csv",
+    "flashInPanReviewCsv": "data/outputs/flash_in_pan_review.csv",
+    "cubeCsv": "data/outputs/cube_360_candidate.csv",
+    "archetypeReconstructionCsv": "data/outputs/archetype_reconstruction.csv",
+    "eraCoverageCsv": "data/outputs/era_coverage.csv",
+    "ecosystemDiversityCsv": "data/outputs/ecosystem_diversity_report.csv",
+    "historicalValidationCsv": "data/outputs/historical_cube_validation_report.csv",
+    "historicalPeriodCoverageCsv": "data/outputs/historical_period_coverage.csv",
+    "historicalArchetypeReconstructionCsv": "data/outputs/historical_archetype_reconstruction.csv"
+  }
+}

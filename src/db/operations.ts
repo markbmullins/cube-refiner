@@ -59,6 +59,10 @@ export type ConfigProfileRecord = {
   readonly updatedAt: string;
 };
 
+export type ConfigProfileDetailRecord = ConfigProfileRecord & {
+  readonly config: unknown;
+};
+
 export function getDatabaseStatus(database: DatabaseSync): DatabaseStatusSummary {
   const schemaMigrations = database
     .prepare("SELECT id FROM schema_migrations ORDER BY id")
@@ -182,6 +186,22 @@ export function listConfigProfiles(database: DatabaseSync): readonly ConfigProfi
     name: String(row.name),
     updatedAt: String(row.updatedAt)
   }));
+}
+
+export function getConfigProfile(database: DatabaseSync, name: string): ConfigProfileDetailRecord | undefined {
+  const row = database
+    .prepare("SELECT name, config_hash AS configHash, config_json AS configJson, updated_at AS updatedAt FROM config_profiles WHERE name = ?")
+    .get(name) as { readonly name: unknown; readonly configHash: unknown; readonly configJson: unknown; readonly updatedAt: unknown } | undefined;
+  if (!row) {
+    return undefined;
+  }
+
+  return {
+    config: JSON.parse(String(row.configJson)) as unknown,
+    configHash: String(row.configHash),
+    name: String(row.name),
+    updatedAt: String(row.updatedAt)
+  };
 }
 
 export function runIntegrityCheck(database: DatabaseSync): readonly string[] {
