@@ -5,26 +5,43 @@ import {
   parseMtgGoldfishDeckPage,
   parseMtgGoldfishDeckText,
   parseMtgGoldfishTournamentDeckLinks,
-  parseMtgGoldfishTournamentMetadata
+  parseMtgGoldfishTournamentMetadata,
+  parseTournamentInputs
 } from "./mtggoldfish.js";
 
 describe("MTGGoldfish parser", () => {
+  it("does not select default tournament archives when events are omitted", () => {
+    expect(parseTournamentInputs(undefined)).toEqual([]);
+  });
+
+  it("normalizes configured tournament archive inputs", () => {
+    expect(
+      parseTournamentInputs(
+        "modern-event-slug, 12345, https://www.mtggoldfish.com/tournament/test-modern"
+      )
+    ).toEqual([
+      "https://www.mtggoldfish.com/tournament/modern-event-slug",
+      "https://www.mtggoldfish.com/tournament/12345",
+      "https://www.mtggoldfish.com/tournament/test-modern"
+    ]);
+  });
+
   it("parses Modern tournament metadata", () => {
     const metadata = parseMtgGoldfishTournamentMetadata(
       `
-      <title>Grand Prix Las Vegas 2017 — Modern (Modern) Decks</title>
-      <h2>Grand Prix Las Vegas 2017 — Modern</h2>
+      <title>Modern Test Event 2017 (Modern) Decks</title>
+      <h2>Modern Test Event 2017</h2>
       <p>Format: Modern<br> Date: 2017-06-18</p>
     `,
-      "https://www.mtggoldfish.com/tournament/grand-prix-las-vegas-2017-modern"
+      "https://www.mtggoldfish.com/tournament/modern-test-event-2017"
     );
 
     expect(metadata).toEqual({
       eventDate: "2017-06-18",
-      eventId: "grand-prix-las-vegas-2017-modern",
-      eventName: "Grand Prix Las Vegas 2017 — Modern",
+      eventId: "modern-test-event-2017",
+      eventName: "Modern Test Event 2017",
       format: "Modern",
-      sourceUrl: "https://www.mtggoldfish.com/tournament/grand-prix-las-vegas-2017-modern"
+      sourceUrl: "https://www.mtggoldfish.com/tournament/modern-test-event-2017"
     });
   });
 

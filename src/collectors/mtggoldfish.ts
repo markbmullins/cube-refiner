@@ -3,10 +3,6 @@ import { parseHistoricalDateRange, yearsForHistoricalDateRange } from "../config
 import type { CollectorContext, DeckCollector } from "./types.js";
 
 const mtgGoldfishBaseUrl = "https://www.mtggoldfish.com";
-const defaultTournamentUrls = [
-  `${mtgGoldfishBaseUrl}/tournament/grand-prix-las-vegas-2017-modern`,
-  `${mtgGoldfishBaseUrl}/tournament/23447`
-] as const;
 const defaultYears = [2013, 2014, 2015, 2016, 2017] as const;
 
 export type MtgGoldfishTournamentMetadata = {
@@ -27,8 +23,8 @@ export type MtgGoldfishDeckLink = {
 
 export const mtgGoldfishCollector: DeckCollector = {
   async collect(context) {
-    if (context.options.allowArchiveDiscovery === "false" && !context.options.events) {
-      context.logger.info("MTGGoldfish default tournament discovery disabled by collection policy.");
+    if (!context.options.events) {
+      context.logger.info("MTGGoldfish collector requires configured tournament events; no pages selected.");
       return [];
     }
 
@@ -257,13 +253,13 @@ function extractDeckText(html: string): string {
   return decodeHtml(valueMatch[2]);
 }
 
-function parseTournamentInputs(value: string | undefined): readonly string[] {
+export function parseTournamentInputs(value: string | undefined): readonly string[] {
   const inputs = value
     ? value
         .split(",")
         .map((input) => input.trim())
         .filter((input) => input.length > 0)
-    : [...defaultTournamentUrls];
+    : [];
 
   return inputs.map((input) => {
     if (input.startsWith("http")) {

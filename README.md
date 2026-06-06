@@ -198,10 +198,10 @@ pnpm collect:mtgo -- --years 2026 --months 05 --limit-events 1 --limit-decks 2
 MTGGoldfish supports explicit tournament archive inputs by slug, numeric ID, or full URL:
 
 ```bash
-pnpm collect:mtggoldfish -- --events grand-prix-las-vegas-2017-modern,23447 --limit-decks 8
+pnpm collect:mtggoldfish -- --events modern-event-slug,12345 --limit-decks 8
 ```
 
-When `--events` is omitted, the collector uses a small set of known historical Modern tournament archives and can be filtered with `--years`.
+When `--events` is omitted, the collector does not select MTGGoldfish tournament pages. Add events through the CLI or through `sources.perSource.mtggoldfish.discoveryOptions.events` in a historical config profile.
 
 ## Normalization Commands
 
