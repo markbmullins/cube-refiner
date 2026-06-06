@@ -1,4 +1,5 @@
-import { openDatabase, applyMigrations, upsertRawDeck } from "../db/index.js";
+import { parseHistoricalDateRange, isDateInHistoricalRange } from "../config/historical.js";
+import { openDatabase, applyMigrations, insertCollectionDateReview, upsertRawDeck } from "../db/index.js";
 import type { DeckSource, RawDeck } from "../types/contracts.js";
 import { defaultProjectPaths } from "../config/paths.js";
 import { createSnapshotStore } from "./snapshotStore.js";
@@ -61,19 +62,74 @@ async function runCollector(
 ): Promise<CollectorRunSummary> {
   context.logger.info(`Collecting ${collector.source} decklists...`);
   const decks = await collector.collect(context);
-  persistRawDecks(context.database, decks);
+  const filtered = filterDecksForHistoricalDateRange(context.database, decks, {
+    endDate: context.options.endDate,
+    startDate: context.options.startDate
+  });
+  persistRawDecks(context.database, filtered.included);
   const parsedOutputPath = context.snapshotStore.writeParsedDecks(
     collector.source,
     new Date().toISOString(),
     decks
   );
-  context.logger.info(`Collected ${decks.length} ${collector.source} decklists.`);
+  if (filtered.excluded > 0) {
+    context.logger.warn(`Excluded ${filtered.excluded} ${collector.source} decklists outside the historical date range.`);
+  }
+  context.logger.info(`Collected ${filtered.included.length} active ${collector.source} decklists.`);
 
   return {
-    deckCount: decks.length,
+    deckCount: filtered.included.length,
     parsedOutputPath,
     source: collector.source
   };
+}
+
+function filterDecksForHistoricalDateRange(
+  database: Parameters<typeof upsertRawDeck>[0],
+  decks: readonly RawDeck[],
+  options: { readonly startDate?: string; readonly endDate?: string }
+): { readonly included: readonly RawDeck[]; readonly excluded: number } {
+  const range = parseHistoricalDateRange(options);
+  const included: RawDeck[] = [];
+  let excluded = 0;
+
+  for (const deck of decks) {
+    if (!deck.eventDate) {
+      insertCollectionDateReview(database, {
+        metadata: { range },
+        reason: "missing_event_date",
+        source: deck.source,
+        sourceUrl: deck.sourceUrl
+      });
+      excluded += 1;
+      continue;
+    }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(deck.eventDate)) {
+      insertCollectionDateReview(database, {
+        eventDate: deck.eventDate,
+        metadata: { range },
+        reason: "invalid_event_date",
+        source: deck.source,
+        sourceUrl: deck.sourceUrl
+      });
+      excluded += 1;
+      continue;
+    }
+    if (!isDateInHistoricalRange(deck.eventDate, range)) {
+      insertCollectionDateReview(database, {
+        eventDate: deck.eventDate,
+        metadata: { range },
+        reason: "out_of_range",
+        source: deck.source,
+        sourceUrl: deck.sourceUrl
+      });
+      excluded += 1;
+      continue;
+    }
+    included.push(deck);
+  }
+
+  return { excluded, included };
 }
 
 export function persistRawDecks(database: Parameters<typeof upsertRawDeck>[0], decks: readonly RawDeck[]): void {

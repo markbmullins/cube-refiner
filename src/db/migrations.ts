@@ -513,6 +513,23 @@ CREATE TABLE IF NOT EXISTS historical_validation_warnings (
 CREATE INDEX IF NOT EXISTS idx_historical_validation_metrics_run ON historical_validation_metrics(validation_run_id, metric_key);
 CREATE INDEX IF NOT EXISTS idx_historical_validation_warnings_run ON historical_validation_warnings(validation_run_id, code);
 `
+  },
+  {
+    description: "Collection historical date range review rows",
+    id: "0010_collection_date_reviews",
+    sql: `
+CREATE TABLE IF NOT EXISTS collection_date_reviews (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  source TEXT NOT NULL CHECK (source IN ('mtgtop8', 'mtggoldfish', 'mtgo')),
+  source_url TEXT NOT NULL,
+  event_date TEXT,
+  reason TEXT NOT NULL CHECK (reason IN ('missing_event_date', 'invalid_event_date', 'out_of_range')),
+  metadata_json TEXT NOT NULL DEFAULT '{}',
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_collection_date_reviews_source ON collection_date_reviews(source, reason);
+`
   }
 ];
 

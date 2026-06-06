@@ -60,6 +60,50 @@ describe("collector runner", () => {
       database.close();
     }
   });
+
+  it("persists only active raw decks inside the configured historical date range", async () => {
+    const root = mkdtempSync(path.join(os.tmpdir(), "cube-refiner-runner-dates-"));
+    const databasePath = path.join(root, "collector.sqlite");
+
+    const summaries = await runCollectors({
+      collectorOptions: {
+        endDate: "2019-04-30",
+        events: [
+          "https://www.mtggoldfish.com/tournament/before-modern",
+          "https://www.mtggoldfish.com/tournament/modern-start",
+          "https://www.mtggoldfish.com/tournament/default-end",
+          "https://www.mtggoldfish.com/tournament/after-default-end"
+        ].join(","),
+        startDate: "2011-08-12"
+      },
+      databasePath,
+      fetcher: boundaryDateFetcher,
+      logger: {
+        error: () => undefined,
+        info: () => undefined,
+        warn: () => undefined
+      },
+      rawDataDir: path.join(root, "raw"),
+      sources: ["mtggoldfish"]
+    });
+
+    expect(summaries[0]?.deckCount).toBe(2);
+
+    const database = openDatabase({ path: databasePath });
+    try {
+      applyMigrations(database);
+      expect(database.prepare("SELECT event_date AS eventDate FROM raw_decks ORDER BY event_date").all()).toEqual([
+        { eventDate: "2011-08-12" },
+        { eventDate: "2019-04-30" }
+      ]);
+      expect(database.prepare("SELECT event_date AS eventDate, reason FROM collection_date_reviews ORDER BY event_date").all()).toEqual([
+        { eventDate: "2011-08-11", reason: "out_of_range" },
+        { eventDate: "2019-05-01", reason: "out_of_range" }
+      ]);
+    } finally {
+      database.close();
+    }
+  });
 });
 
 const fakeMtgGoldfishFetcher: Fetcher = async (url) => {
@@ -101,3 +145,67 @@ sideboard
     text: async () => body ?? "Not found"
   };
 };
+
+const boundaryDateFetcher: Fetcher = async (url) => {
+  const tournamentDate = /before-modern/.test(url)
+    ? "2011-08-11"
+    : /modern-start/.test(url)
+      ? "2011-08-12"
+      : /after-default-end/.test(url)
+          ? "2019-05-01"
+          : /default-end/.test(url)
+            ? "2019-04-30"
+            : undefined;
+  const deckMatch = /\/deck\/([^/]+)/.exec(url);
+  const body = deckMatch
+    ? deckPage(deckMatch[1] ?? "deck", deckDateForDeck(deckMatch[1] ?? ""))
+    : tournamentDate
+      ? tournamentPage(url.split("/").at(-1) ?? "event", tournamentDate)
+      : undefined;
+
+  return {
+    ok: body !== undefined,
+    status: body === undefined ? 404 : 200,
+    text: async () => body ?? "Not found"
+  };
+};
+
+function tournamentPage(slug: string, date: string): string {
+  const deckId = deckIdForSlug(slug);
+  return `
+    <h2>${slug}</h2>
+    <p>Format: Modern<br> Date: ${date}</p>
+    <tr class='tournament-decklist-event'>
+      <td>1st</td>
+      <td><a href="/deck/${deckId}">Burn</a></td>
+      <td><a href="/player/Test+Player">Test Player</a></td>
+    </tr>
+  `;
+}
+
+function deckPage(slug: string, date: string): string {
+  return `
+    <h1 class='title'>Burn <span class='author'>by Test Player</span></h1>
+    <p class='deck-container-information'>
+    Format: Modern<br>
+    Event: <a href="/tournament/${slug}">${slug}</a>, 1st Place<br>
+    Deck Date: ${date}
+    </p>
+    <input type="hidden" name="deck_input[deck]" value="4 Lightning Bolt
+" />
+  `;
+}
+
+function deckDateForDeck(slug: string): string {
+  if (slug === "1001") return "Aug 11, 2011";
+  if (slug === "1002") return "Aug 12, 2011";
+  if (slug === "1003") return "Apr 30, 2019";
+  return "May 1, 2019";
+}
+
+function deckIdForSlug(slug: string): string {
+  if (slug === "before-modern") return "1001";
+  if (slug === "modern-start") return "1002";
+  if (slug === "default-end") return "1003";
+  return "1004";
+}

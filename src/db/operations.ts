@@ -30,6 +30,7 @@ export type ManualReviewQueue =
   | "period_assignments"
   | "historical_coverage"
   | "historical_validation"
+  | "collection_dates"
   | "parasitic_cards"
   | "validation_warnings"
   | "zero_support_cards";
@@ -93,6 +94,7 @@ export function getDatabaseStatus(database: DatabaseSync): DatabaseStatusSummary
       "historical_validation_runs",
       "historical_validation_metrics",
       "historical_validation_warnings",
+      "collection_date_reviews",
       "output_artifacts"
     ].map((table) => [table, tableCount(database, table)])
   );
@@ -128,6 +130,7 @@ export function listManualReviewItems(
         "period_assignments",
         "historical_coverage",
         "historical_validation",
+        "collection_dates",
         "parasitic_cards",
         "validation_warnings",
         "zero_support_cards"
@@ -366,6 +369,29 @@ function listQueue(database: DatabaseSync, queue: ManualReviewQueue): readonly M
           pipelineRunId: row.pipelineRunId,
           severity: row.severity,
           validationRunId: row.validationRunId
+        })
+      );
+  }
+
+  if (queue === "collection_dates") {
+    return database
+      .prepare(
+        `SELECT
+          id,
+          source,
+          source_url AS sourceUrl,
+          event_date AS eventDate,
+          reason,
+          metadata_json AS metadataJson
+         FROM collection_date_reviews
+         ORDER BY id`
+      )
+      .all()
+      .map((row) =>
+        reviewItem(queue, String(row.sourceUrl), `Collection date ${String(row.reason)}`, {
+          ...parseJsonObject(row.metadataJson),
+          eventDate: row.eventDate,
+          source: row.source
         })
       );
   }

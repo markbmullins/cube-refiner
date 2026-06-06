@@ -187,6 +187,14 @@ export type PersistedHistoricalValidationWarningRecord = HistoricalValidationWar
   readonly createdAt: string;
 };
 
+export type CollectionDateReviewInput = {
+  readonly source: DeckSource;
+  readonly sourceUrl: string;
+  readonly eventDate?: string;
+  readonly reason: "missing_event_date" | "invalid_event_date" | "out_of_range";
+  readonly metadata?: unknown;
+};
+
 export type DedupeClusterInput = {
   readonly clusterId: string;
   readonly strategy: "exact" | "near";
@@ -504,6 +512,36 @@ export function upsertRawDeck(
     database.exec("ROLLBACK;");
     throw error;
   }
+}
+
+export function insertCollectionDateReview(database: DatabaseSync, input: CollectionDateReviewInput): void {
+  database
+    .prepare(
+      `INSERT INTO collection_date_reviews (
+        source, source_url, event_date, reason, metadata_json
+      )
+      VALUES (?, ?, ?, ?, ?)`
+    )
+    .run(input.source, input.sourceUrl, input.eventDate ?? null, input.reason, JSON.stringify(input.metadata ?? {}));
+}
+
+export function listCollectionDateReviews(database: DatabaseSync): readonly (CollectionDateReviewInput & { readonly id: number })[] {
+  const rows = database
+    .prepare(
+      `SELECT id, source, source_url AS sourceUrl, event_date AS eventDate, reason, metadata_json AS metadataJson
+       FROM collection_date_reviews
+       ORDER BY id`
+    )
+    .all();
+
+  return rows.map((row) => ({
+    eventDate: row.eventDate === null || row.eventDate === undefined ? undefined : String(row.eventDate),
+    id: Number(row.id),
+    metadata: parseJson(String(row.metadataJson), {}),
+    reason: String(row.reason) as CollectionDateReviewInput["reason"],
+    source: String(row.source) as DeckSource,
+    sourceUrl: String(row.sourceUrl)
+  }));
 }
 
 export function upsertCard(database: DatabaseSync, input: CardInput): void {

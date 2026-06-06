@@ -1,4 +1,5 @@
 import type { DeckCard, RawDeck } from "../types/contracts.js";
+import { parseHistoricalDateRange, yearsForHistoricalDateRange } from "../config/historical.js";
 import type { CollectorContext, DeckCollector } from "./types.js";
 
 const mtgTop8BaseUrl = "https://www.mtgtop8.com";
@@ -22,7 +23,7 @@ export type MtgTop8DeckLink = {
 
 export const mtgTop8Collector: DeckCollector = {
   async collect(context) {
-    const years = parseYears(context.options.years);
+    const years = parseYears(context.options.years, context);
     const formatPage = await context.snapshotStore.fetchText({
       cacheKey: "modern-format",
       metadata: { kind: "format-archive" },
@@ -225,9 +226,12 @@ function parseEventDate(html: string): string | undefined {
   return `20${shortYear}-${month}-${day}`;
 }
 
-function parseYears(value: string | undefined): readonly number[] {
+function parseYears(value: string | undefined, context?: CollectorContext): readonly number[] {
   if (!value) {
-    return [...defaultYears];
+    return context ? yearsForHistoricalDateRange(parseHistoricalDateRange({
+      endDate: context.options.endDate,
+      startDate: context.options.startDate
+    })) : [...defaultYears];
   }
 
   const years = value

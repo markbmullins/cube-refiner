@@ -1,4 +1,5 @@
 import type { DeckCard, RawDeck } from "../types/contracts.js";
+import { monthsForHistoricalDateRange, parseHistoricalDateRange, yearsForHistoricalDateRange } from "../config/historical.js";
 import type { CollectorContext, DeckCollector } from "./types.js";
 
 const mtgoBaseUrl = "https://www.mtgo.com";
@@ -44,11 +45,11 @@ type MtgoDecklistData = {
 
 export const mtgoCollector: DeckCollector = {
   async collect(context) {
-    const years = parseYears(context.options.years);
-    const months = parseMonths(context.options.months);
+    const years = parseYears(context.options.years, context);
     const indexItems: MtgoDecklistIndexItem[] = [];
 
     for (const year of years) {
+      const months = parseMonths(context.options.months, context, year);
       for (const month of months) {
         if (year === 2015 && Number(month) < 11) {
           continue;
@@ -187,9 +188,12 @@ function normalizeDate(value: string | undefined): string | undefined {
   return match ? `${match[1]}-${match[2]}-${match[3]}` : undefined;
 }
 
-function parseYears(value: string | undefined): readonly number[] {
+function parseYears(value: string | undefined, context?: CollectorContext): readonly number[] {
   if (!value) {
-    return [...defaultYears];
+    return context ? yearsForHistoricalDateRange(parseHistoricalDateRange({
+      endDate: context.options.endDate,
+      startDate: context.options.startDate
+    })) : [...defaultYears];
   }
 
   const years = value
@@ -200,7 +204,13 @@ function parseYears(value: string | undefined): readonly number[] {
   return years.length > 0 ? years : [...defaultYears];
 }
 
-function parseMonths(value: string | undefined): readonly string[] {
+function parseMonths(value: string | undefined, context?: CollectorContext, year?: number): readonly string[] {
+  if (!value && context && year !== undefined) {
+    return monthsForHistoricalDateRange(parseHistoricalDateRange({
+      endDate: context.options.endDate,
+      startDate: context.options.startDate
+    }), year);
+  }
   if (!value) {
     return [...allMonths];
   }

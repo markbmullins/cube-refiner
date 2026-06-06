@@ -57,7 +57,7 @@ if (command === "help" || command === "--help" || command === "-h") {
 
 Usage:
   cube-refiner help
-  cube-refiner pipeline:run [--db path] [--raw-dir path] [--output-dir path] [--skip-collect] [--scryfall-file path] [--fetch-scryfall] [--pipeline-run-id id] [--cube-run-id id]
+  cube-refiner pipeline:run [--db path] [--raw-dir path] [--output-dir path] [--skip-collect] [--scryfall-file path] [--fetch-scryfall] [--pipeline-run-id id] [--cube-run-id id] [--start-date YYYY-MM-DD] [--end-date YYYY-MM-DD]
   cube-refiner db:init [--db path]
   cube-refiner db:migrate [--db path]
   cube-refiner db:status [--db path] [--json]
@@ -68,10 +68,10 @@ Usage:
   cube-refiner db:check [--db path] [--json]
   cube-refiner db:vacuum [--db path]
   cube-refiner db:reset [--db path] --force [--backup path]
-  cube-refiner collect:all [--db path] [--raw-dir path] [--refresh]
-  cube-refiner collect:mtgtop8 [--db path] [--raw-dir path] [--refresh]
-  cube-refiner collect:mtgo [--db path] [--raw-dir path] [--refresh]
-  cube-refiner collect:mtggoldfish [--db path] [--raw-dir path] [--refresh] [--events ids-or-urls]
+  cube-refiner collect:all [--db path] [--raw-dir path] [--refresh] [--start-date YYYY-MM-DD] [--end-date YYYY-MM-DD]
+  cube-refiner collect:mtgtop8 [--db path] [--raw-dir path] [--refresh] [--start-date YYYY-MM-DD] [--end-date YYYY-MM-DD]
+  cube-refiner collect:mtgo [--db path] [--raw-dir path] [--refresh] [--start-date YYYY-MM-DD] [--end-date YYYY-MM-DD]
+  cube-refiner collect:mtggoldfish [--db path] [--raw-dir path] [--refresh] [--events ids-or-urls] [--start-date YYYY-MM-DD] [--end-date YYYY-MM-DD]
   cube-refiner normalize:cards [--db path] [--scryfall-file path] [--fetch-scryfall] [--audit-csv path] [--fail-on-unknown]
   cube-refiner normalize:archetypes [--db path] [--mapping-file path] [--audit-csv path] [--fail-on-unmapped]
   cube-refiner dedupe:decks [--db path] [--report-csv path] [--near-overlap count]
@@ -105,7 +105,9 @@ if (command === "pipeline:run") {
       limitDecks: getOptionValue("--limit-decks"),
       limitEvents: getOptionValue("--limit-events"),
       events: getOptionValue("--events"),
+      endDate: getOptionValue("--end-date"),
       months: getOptionValue("--months"),
+      startDate: getOptionValue("--start-date"),
       years: getOptionValue("--years")
     },
     databasePath,
@@ -142,7 +144,9 @@ if (command.startsWith("collect:")) {
       limitDecks: getOptionValue("--limit-decks"),
       limitEvents: getOptionValue("--limit-events"),
       events: getOptionValue("--events"),
+      endDate: getOptionValue("--end-date"),
       months: getOptionValue("--months"),
+      startDate: getOptionValue("--start-date"),
       years: getOptionValue("--years")
     },
     databasePath,
@@ -844,6 +848,7 @@ function parseReviewQueue(value: string | undefined): Parameters<typeof listManu
     value === "period_assignments" ||
     value === "historical_coverage" ||
     value === "historical_validation" ||
+    value === "collection_dates" ||
     value === "parasitic_cards" ||
     value === "validation_warnings" ||
     value === "zero_support_cards"

@@ -8,4 +8,5 @@ export * from "./pipeline.js";
 export * from "./periods.js";
 export * from "./scoring/index.js";
 export * from "./types/contracts.js";
+export * from "./config/historical.js";
 export * from "./config/paths.js";

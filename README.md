@@ -99,6 +99,8 @@ The coverage command refreshes deck-to-period assignments, writes `data/outputs/
 
 The Historical Modern workflow is intentionally different from a greatest-hits cube. Aggregate frequency finds broadly strong cards; historical scoring also asks whether the cube preserves the lived shape of Modern across Standard set-release windows. Format pillars are long-lived cards that repeatedly mattered, archetype icons are high-peak cards tied to specific experiences, and flashes in the pan are short-lived spikes that deserve review before becoming automatic inclusions.
 
+The default active historical range is Modern's start on `2011-08-12` through April 2019, represented as inclusive end date `2019-04-30`. Collection and pipeline commands accept `--start-date YYYY-MM-DD` and `--end-date YYYY-MM-DD`; exact date filtering is authoritative even when lower-level `--years` or `--months` discovery hints are also provided. Parsed decks outside the range, with invalid dates, or with missing dates are excluded from active `raw_decks` and exposed in `db:reviews --queue collection_dates`.
+
 Run the historical stages in order:
 
 ```bash
@@ -111,6 +113,7 @@ pnpm dev -- cube:reconstruct --cube-run-id historical-cube-v1 --pipeline-run-id 
 pnpm dev -- cube:validate:historical --cube-run-id historical-cube-v1 --pipeline-run-id historical-modern-v1
 pnpm dev -- db:reviews --queue historical_coverage
 pnpm dev -- db:reviews --queue historical_validation
+pnpm dev -- db:reviews --queue collection_dates
 ```
 
 Tune date ranges and period definitions with `periods:generate`; tune source assumptions in `data/source-coverage-manifest.json`; tune historical scoring with `score:historical` threshold and weight flags; tune historical cube generation with `cube:generate --mode historical` minimum pillar, icon, and period coverage flags.

@@ -1,4 +1,5 @@
 import type { DeckCard, RawDeck } from "../types/contracts.js";
+import { parseHistoricalDateRange, yearsForHistoricalDateRange } from "../config/historical.js";
 import type { CollectorContext, DeckCollector } from "./types.js";
 
 const mtgGoldfishBaseUrl = "https://www.mtggoldfish.com";
@@ -26,7 +27,7 @@ export type MtgGoldfishDeckLink = {
 
 export const mtgGoldfishCollector: DeckCollector = {
   async collect(context) {
-    const years = parseYears(context.options.years);
+    const years = parseYears(context.options.years, context);
     const tournamentUrls = applyLimit(parseTournamentInputs(context.options.events), context.options.limitEvents);
     context.logger.info(`MTGGoldfish tournament pages selected: ${tournamentUrls.length}`);
 
@@ -268,9 +269,12 @@ function parseTournamentInputs(value: string | undefined): readonly string[] {
   });
 }
 
-function parseYears(value: string | undefined): readonly number[] {
+function parseYears(value: string | undefined, context?: CollectorContext): readonly number[] {
   if (!value) {
-    return [...defaultYears];
+    return context ? yearsForHistoricalDateRange(parseHistoricalDateRange({
+      endDate: context.options.endDate,
+      startDate: context.options.startDate
+    })) : [...defaultYears];
   }
 
   const years = value
