@@ -11,15 +11,42 @@
   },
   "sources": {
     "collectors": ["mtgtop8", "mtgo", "mtggoldfish"],
+    "enabledSources": ["mtgtop8", "mtgo", "mtggoldfish"],
     "datePolicy": "event_date_required",
+    "unknownDateHandling": "quarantine",
+    "invalidDateHandling": "quarantine",
+    "outOfRangeHandling": "quarantine",
+    "allowArchiveDiscovery": true,
     "minimumDecksPerPeriod": 8,
-    "sourceCoverageManifestPath": "data/source-coverage-manifest.json"
+    "sourceCoverageManifestPath": "data/source-coverage-manifest.json",
+    "perSource": {
+      "mtgtop8": {
+        "allowArchiveDiscovery": true,
+        "discoveryOptions": {},
+        "include": [],
+        "exclude": []
+      },
+      "mtgo": {
+        "allowArchiveDiscovery": true,
+        "discoveryOptions": {},
+        "include": [],
+        "exclude": []
+      },
+      "mtggoldfish": {
+        "allowArchiveDiscovery": true,
+        "discoveryOptions": {},
+        "include": [],
+        "exclude": []
+      }
+    }
   },
   "setReleaseCalendar": {
     "path": "data/standard-set-releases.json"
   },
   "coverage": {
-    "minimumDecksPerPeriod": 8
+    "minimumDecksPerPeriod": 8,
+    "minimumDecksPerSourcePeriod": 1,
+    "missingSourceWarningPolicy": "warn"
   },
   "scoring": {
     "thresholds": {

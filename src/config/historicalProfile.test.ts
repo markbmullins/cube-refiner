@@ -13,6 +13,8 @@ describe("historical Modern config profiles", () => {
     expect(loaded.config.project.name).toBe("Historical Modern Cube");
     expect(loaded.config.historical.dateRange).toEqual({ endDate: "2019-04-30", startDate: "2011-08-12" });
     expect(loaded.config.historical.periodModel).toBe("standard_set_release");
+    expect(loaded.config.sources.outOfRangeHandling).toBe("quarantine");
+    expect(loaded.config.coverage.minimumDecksPerSourcePeriod).toBe(1);
     expect(loaded.configHash).toMatch(/^[a-f0-9]{64}$/);
   });
 

@@ -462,9 +462,15 @@ export function registerOutputArtifact(database: DatabaseSync, input: OutputArti
 export function upsertRawDeck(
   database: DatabaseSync,
   input: RawDeck,
-  options: { readonly snapshotId?: string; readonly rawDeckId?: string } = {}
+  options: {
+    readonly active?: boolean;
+    readonly collectionStatus?: "active" | "missing_event_date" | "invalid_event_date" | "out_of_range";
+    readonly snapshotId?: string;
+    readonly rawDeckId?: string;
+  } = {}
 ): string {
   const rawDeckId = options.rawDeckId ?? stableId("raw-deck", input.source, input.sourceUrl);
+  const collectionStatus = options.collectionStatus ?? "active";
 
   database.exec("BEGIN;");
   try {
@@ -472,9 +478,9 @@ export function upsertRawDeck(
       .prepare(
         `INSERT INTO raw_decks (
           id, snapshot_id, source, source_url, event_name, event_date, format,
-          player, placement, reported_archetype, raw_json, updated_at
+          player, placement, reported_archetype, raw_json, active, collection_status, updated_at
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
           snapshot_id = excluded.snapshot_id,
           source = excluded.source,
@@ -486,6 +492,8 @@ export function upsertRawDeck(
           placement = excluded.placement,
           reported_archetype = excluded.reported_archetype,
           raw_json = excluded.raw_json,
+          active = excluded.active,
+          collection_status = excluded.collection_status,
           updated_at = excluded.updated_at`
       )
       .run(
@@ -500,6 +508,8 @@ export function upsertRawDeck(
         input.placement ?? null,
         input.reportedArchetype ?? null,
         JSON.stringify(input),
+        options.active === false ? 0 : 1,
+        collectionStatus,
         new Date().toISOString()
       );
 
@@ -1104,6 +1114,7 @@ export function listRawDeckRecords(database: DatabaseSync): readonly RawDeckReco
     .prepare(
       `SELECT id, source, source_url AS sourceUrl, event_date AS eventDate, reported_archetype AS reportedArchetype
        FROM raw_decks
+       WHERE active = 1
        ORDER BY source, event_date, id`
     )
     .all();

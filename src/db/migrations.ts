@@ -530,6 +530,15 @@ CREATE TABLE IF NOT EXISTS collection_date_reviews (
 
 CREATE INDEX IF NOT EXISTS idx_collection_date_reviews_source ON collection_date_reviews(source, reason);
 `
+  },
+  {
+    description: "Raw deck active collection status",
+    id: "0011_raw_deck_collection_status",
+    sql: `
+ALTER TABLE raw_decks ADD COLUMN active INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE raw_decks ADD COLUMN collection_status TEXT NOT NULL DEFAULT 'active';
+CREATE INDEX IF NOT EXISTS idx_raw_decks_active_status ON raw_decks(active, collection_status);
+`
   }
 ];
 

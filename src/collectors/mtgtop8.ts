@@ -23,6 +23,11 @@ export type MtgTop8DeckLink = {
 
 export const mtgTop8Collector: DeckCollector = {
   async collect(context) {
+    if (context.options.allowArchiveDiscovery === "false") {
+      context.logger.info("MTGTop8 archive discovery disabled by collection policy.");
+      return [];
+    }
+
     const years = parseYears(context.options.years, context);
     const formatPage = await context.snapshotStore.fetchText({
       cacheKey: "modern-format",

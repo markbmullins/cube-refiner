@@ -4,6 +4,7 @@ import path from "node:path";
 import type { DatabaseSync } from "node:sqlite";
 
 import { generateCandidatePools, generateCube, validateCube } from "./build/index.js";
+import type { CollectionDatePolicy, SourceCollectionPolicy } from "./collectors/index.js";
 import { runCollectors } from "./collectors/index.js";
 import { defaultProjectPaths } from "./config/paths.js";
 import {
@@ -24,6 +25,7 @@ import {
   normalizeCards
 } from "./normalize/index.js";
 import { buildCardArchetypeMatrix, scoreCards } from "./scoring/index.js";
+import type { DeckSource } from "./types/contracts.js";
 
 export type RunFullPipelineOptions = {
   readonly databasePath?: string;
@@ -38,9 +40,12 @@ export type RunFullPipelineOptions = {
   readonly validationRunId?: string;
   readonly totalCards?: number;
   readonly collectorOptions?: Readonly<Record<string, string | undefined>>;
+  readonly collectionDatePolicy?: Partial<CollectionDatePolicy>;
   readonly configHash?: string;
   readonly configProfileName?: string;
   readonly effectiveConfig?: unknown;
+  readonly sourcePolicies?: Partial<Record<DeckSource, SourceCollectionPolicy>>;
+  readonly sources?: readonly DeckSource[];
 };
 
 export type RunFullPipelineSummary = {
@@ -99,10 +104,13 @@ export async function runFullPipeline(options: RunFullPipelineOptions = {}): Pro
     if (!options.skipCollect) {
       await runStage(database, pipelineRunId, "collect", configHash, {}, async () => {
         const summaries = await runCollectors({
+          collectionDatePolicy: options.collectionDatePolicy,
           collectorOptions: options.collectorOptions,
           databasePath,
           rawDataDir,
-          refresh: options.refresh
+          refresh: options.refresh,
+          sourcePolicies: options.sourcePolicies,
+          sources: options.sources
         });
         return {
           outputRefs: {

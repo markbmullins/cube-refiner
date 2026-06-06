@@ -148,6 +148,59 @@ describe("historical source coverage", () => {
     expect(readFileSync(outputCsvPath, "utf8")).toContain("pipeline_run_id,period_id");
     expect(readFileSync(outputCsvPath, "utf8")).toContain("missing_source_coverage");
   });
+
+  it("uses configured source-period thresholds and missing source warning policy", () => {
+    const outputDir = mkdtempSync(path.join(os.tmpdir(), "cube-refiner-coverage-policy-"));
+    const manifestPath = path.join(outputDir, "source-manifest.json");
+    const outputCsvPath = path.join(outputDir, "historical_source_coverage.csv");
+    writeFileSync(
+      manifestPath,
+      JSON.stringify([
+        {
+          endDate: "2012-02-02",
+          source: "mtgtop8",
+          startDate: "2011-08-12",
+          status: "available"
+        },
+        {
+          endDate: "2012-02-02",
+          source: "mtgo",
+          startDate: "2011-08-12",
+          status: "unknown"
+        }
+      ])
+    );
+
+    database = openDatabase({ path: ":memory:" });
+    applyMigrations(database);
+    replaceSetReleases(database, testReleases);
+    generateAndPersistMetagamePeriods(database, {
+      endDate: "2011-09-29",
+      startDate: "2011-08-12"
+    });
+    upsertTestDeck(database, "jund-1", "2011-08-12", "mtgtop8", "BGx Midrange");
+
+    const summary = generateHistoricalCoverageReport(database, {
+      minimumDecksPerPeriod: 1,
+      minimumDecksPerSourcePeriod: 2,
+      missingSourceWarningPolicy: "fail",
+      outputCsvPath,
+      pipelineRunId: "coverage-policy-test",
+      sourceManifestPath: manifestPath
+    });
+
+    expect(summary.warnings).toBe(2);
+    expect(
+      listHistoricalCoverageWarnings(database, "coverage-policy-test").map((warning) => ({
+        severity: warning.severity,
+        source: warning.source,
+        warningType: warning.warningType
+      }))
+    ).toEqual([
+      { severity: "warn", source: "mtgtop8", warningType: "thin_period" },
+      { severity: "fail", source: "mtgo", warningType: "missing_source_coverage" }
+    ]);
+  });
 });
 
 const testReleases: readonly SetRelease[] = [

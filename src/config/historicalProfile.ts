@@ -9,6 +9,15 @@ export const defaultHistoricalModernConfigPath = path.join(process.cwd(), "data"
 export type HistoricalPeriodModel = "standard_set_release";
 export type HistoricalDatePolicy = "event_date_required";
 export type HistoricalCollectorSource = "mtgtop8" | "mtgo" | "mtggoldfish";
+export type HistoricalCollectionDateHandling = "discard" | "quarantine" | "persist_inactive";
+export type HistoricalMissingSourceWarningPolicy = "ignore" | "warn" | "fail";
+
+export type HistoricalPerSourcePolicy = {
+  readonly allowArchiveDiscovery: boolean;
+  readonly discoveryOptions: Readonly<Record<string, string>>;
+  readonly include: readonly string[];
+  readonly exclude: readonly string[];
+};
 
 export type HistoricalModernConfig = {
   readonly project: {
@@ -20,15 +29,23 @@ export type HistoricalModernConfig = {
   };
   readonly sources: {
     readonly collectors: readonly HistoricalCollectorSource[];
+    readonly enabledSources: readonly HistoricalCollectorSource[];
     readonly datePolicy: HistoricalDatePolicy;
+    readonly unknownDateHandling: HistoricalCollectionDateHandling;
+    readonly invalidDateHandling: HistoricalCollectionDateHandling;
+    readonly outOfRangeHandling: HistoricalCollectionDateHandling;
+    readonly allowArchiveDiscovery: boolean;
     readonly minimumDecksPerPeriod: number;
     readonly sourceCoverageManifestPath: string;
+    readonly perSource: Readonly<Record<HistoricalCollectorSource, HistoricalPerSourcePolicy>>;
   };
   readonly setReleaseCalendar: {
     readonly path: string;
   };
   readonly coverage: {
     readonly minimumDecksPerPeriod: number;
+    readonly minimumDecksPerSourcePeriod: number;
+    readonly missingSourceWarningPolicy: HistoricalMissingSourceWarningPolicy;
   };
   readonly scoring: {
     readonly thresholds: {
@@ -135,11 +152,10 @@ export function validateHistoricalModernConfig(value: unknown): HistoricalModern
   }
 
   const collectors = requireArray(sources.collectors, "sources.collectors").map((source) => {
-    const value = requireString(source, "sources.collectors[]");
-    if (value !== "mtgtop8" && value !== "mtgo" && value !== "mtggoldfish") {
-      throw new Error(`Unknown historical collector source: ${value}`);
-    }
-    return value;
+    return requireCollectorSource(source, "sources.collectors[]");
+  });
+  const enabledSources = requireArray(sources.enabledSources ?? sources.collectors, "sources.enabledSources").map((source) => {
+    return requireCollectorSource(source, "sources.enabledSources[]");
   });
 
   const datePolicy = requireString(sources.datePolicy, "sources.datePolicy");
@@ -160,7 +176,9 @@ export function validateHistoricalModernConfig(value: unknown): HistoricalModern
       supportShare: requireNumber(archetypeReconstruction.supportShare, "archetypeReconstruction.supportShare")
     },
     coverage: {
-      minimumDecksPerPeriod: requirePositiveInteger(coverage.minimumDecksPerPeriod, "coverage.minimumDecksPerPeriod")
+      minimumDecksPerPeriod: requirePositiveInteger(coverage.minimumDecksPerPeriod, "coverage.minimumDecksPerPeriod"),
+      minimumDecksPerSourcePeriod: requirePositiveInteger(coverage.minimumDecksPerSourcePeriod, "coverage.minimumDecksPerSourcePeriod"),
+      missingSourceWarningPolicy: requireMissingSourceWarningPolicy(coverage.missingSourceWarningPolicy, "coverage.missingSourceWarningPolicy")
     },
     cubeGeneration: {
       minimumArchetypeIcons: requirePositiveInteger(cubeGeneration.minimumArchetypeIcons, "cubeGeneration.minimumArchetypeIcons"),
@@ -213,9 +231,15 @@ export function validateHistoricalModernConfig(value: unknown): HistoricalModern
       path: requireString(setReleaseCalendar.path, "setReleaseCalendar.path")
     },
     sources: {
+      allowArchiveDiscovery: requireBoolean(sources.allowArchiveDiscovery, "sources.allowArchiveDiscovery"),
       collectors,
       datePolicy,
+      enabledSources,
+      invalidDateHandling: requireCollectionDateHandling(sources.invalidDateHandling, "sources.invalidDateHandling"),
       minimumDecksPerPeriod: requirePositiveInteger(sources.minimumDecksPerPeriod, "sources.minimumDecksPerPeriod"),
+      outOfRangeHandling: requireCollectionDateHandling(sources.outOfRangeHandling, "sources.outOfRangeHandling"),
+      perSource: requirePerSourcePolicy(sources.perSource),
+      unknownDateHandling: requireCollectionDateHandling(sources.unknownDateHandling, "sources.unknownDateHandling"),
       sourceCoverageManifestPath: requireString(sources.sourceCoverageManifestPath, "sources.sourceCoverageManifestPath")
     },
     validation: {
@@ -299,6 +323,65 @@ function requireString(value: unknown, name: string): string {
     throw new Error(`Historical config ${name} must be a non-empty string.`);
   }
   return value;
+}
+
+function requireBoolean(value: unknown, name: string): boolean {
+  if (typeof value !== "boolean") {
+    throw new Error(`Historical config ${name} must be a boolean.`);
+  }
+  return value;
+}
+
+function requireCollectorSource(value: unknown, name: string): HistoricalCollectorSource {
+  const source = requireString(value, name);
+  if (source !== "mtgtop8" && source !== "mtgo" && source !== "mtggoldfish") {
+    throw new Error(`Unknown historical collector source: ${source}`);
+  }
+  return source;
+}
+
+function requireCollectionDateHandling(value: unknown, name: string): HistoricalCollectionDateHandling {
+  const handling = requireString(value, name);
+  if (handling !== "discard" && handling !== "quarantine" && handling !== "persist_inactive") {
+    throw new Error(`Unsupported historical collection date handling: ${handling}`);
+  }
+  return handling;
+}
+
+function requireMissingSourceWarningPolicy(value: unknown, name: string): HistoricalMissingSourceWarningPolicy {
+  const policy = requireString(value, name);
+  if (policy !== "ignore" && policy !== "warn" && policy !== "fail") {
+    throw new Error(`Unsupported missing source warning policy: ${policy}`);
+  }
+  return policy;
+}
+
+function requirePerSourcePolicy(value: unknown): Readonly<Record<HistoricalCollectorSource, HistoricalPerSourcePolicy>> {
+  const record = requireRecord(value, "sources.perSource");
+  return {
+    mtggoldfish: requireSingleSourcePolicy(record.mtggoldfish, "sources.perSource.mtggoldfish"),
+    mtgo: requireSingleSourcePolicy(record.mtgo, "sources.perSource.mtgo"),
+    mtgtop8: requireSingleSourcePolicy(record.mtgtop8, "sources.perSource.mtgtop8")
+  };
+}
+
+function requireSingleSourcePolicy(value: unknown, name: string): HistoricalPerSourcePolicy {
+  const record = requireRecord(value, name);
+  return {
+    allowArchiveDiscovery: requireBoolean(record.allowArchiveDiscovery, `${name}.allowArchiveDiscovery`),
+    discoveryOptions: requireStringRecord(record.discoveryOptions, `${name}.discoveryOptions`),
+    exclude: requireStringArray(record.exclude, `${name}.exclude`),
+    include: requireStringArray(record.include, `${name}.include`)
+  };
+}
+
+function requireStringRecord(value: unknown, name: string): Readonly<Record<string, string>> {
+  const record = requireRecord(value, name);
+  return Object.fromEntries(Object.entries(record).map(([key, entry]) => [key, requireString(entry, `${name}.${key}`)]));
+}
+
+function requireStringArray(value: unknown, name: string): readonly string[] {
+  return requireArray(value, name).map((entry) => requireString(entry, `${name}[]`));
 }
 
 function requireNumber(value: unknown, name: string): number {

@@ -104,6 +104,46 @@ describe("collector runner", () => {
       database.close();
     }
   });
+
+  it("can persist unknown-date decks as inactive review items", async () => {
+    const root = mkdtempSync(path.join(os.tmpdir(), "cube-refiner-runner-inactive-"));
+    const databasePath = path.join(root, "collector.sqlite");
+
+    const summaries = await runCollectors({
+      collectionDatePolicy: {
+        missingDateHandling: "persist_inactive"
+      },
+      collectorOptions: {
+        events: "https://www.mtggoldfish.com/tournament/missing-date",
+        startDate: "2011-08-12",
+        endDate: "2019-04-30"
+      },
+      databasePath,
+      fetcher: missingDateFetcher,
+      logger: {
+        error: () => undefined,
+        info: () => undefined,
+        warn: () => undefined
+      },
+      rawDataDir: path.join(root, "raw"),
+      sources: ["mtggoldfish"]
+    });
+
+    expect(summaries[0]?.deckCount).toBe(0);
+
+    const database = openDatabase({ path: databasePath });
+    try {
+      applyMigrations(database);
+      expect(database.prepare("SELECT active, collection_status AS collectionStatus FROM raw_decks").all()).toEqual([
+        { active: 0, collectionStatus: "missing_event_date" }
+      ]);
+      expect(database.prepare("SELECT reason FROM collection_date_reviews").all()).toEqual([
+        { reason: "missing_event_date" }
+      ]);
+    } finally {
+      database.close();
+    }
+  });
 });
 
 const fakeMtgGoldfishFetcher: Fetcher = async (url) => {
@@ -161,6 +201,36 @@ const boundaryDateFetcher: Fetcher = async (url) => {
     ? deckPage(deckMatch[1] ?? "deck", deckDateForDeck(deckMatch[1] ?? ""))
     : tournamentDate
       ? tournamentPage(url.split("/").at(-1) ?? "event", tournamentDate)
+      : undefined;
+
+  return {
+    ok: body !== undefined,
+    status: body === undefined ? 404 : 200,
+    text: async () => body ?? "Not found"
+  };
+};
+
+const missingDateFetcher: Fetcher = async (url) => {
+  const body = /\/deck\/99999/.test(url)
+    ? `
+      <h1 class='title'>Burn <span class='author'>by Test Player</span></h1>
+      <p class='deck-container-information'>
+      Format: Modern<br>
+      Event: <a href="/tournament/missing-date">Missing Date Modern</a>, 1st Place<br>
+      </p>
+      <input type="hidden" name="deck_input[deck]" value="4 Lightning Bolt
+" />
+    `
+    : /missing-date/.test(url)
+      ? `
+      <h2>Missing Date Modern</h2>
+      <p>Format: Modern</p>
+      <tr class='tournament-decklist-event'>
+        <td>1st</td>
+        <td><a href="/deck/99999">Burn</a></td>
+        <td><a href="/player/Test+Player">Test Player</a></td>
+      </tr>
+    `
       : undefined;
 
   return {

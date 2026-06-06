@@ -29,6 +29,9 @@ export const defaultHistoricalCoverageCsvPath = path.join(defaultProjectPaths.ou
 export const defaultMinimumDecksPerPeriod = 8;
 
 export type HistoricalCoverageReportOptions = {
+  readonly configHash?: string;
+  readonly minimumDecksPerSourcePeriod?: number;
+  readonly missingSourceWarningPolicy?: "ignore" | "warn" | "fail";
   readonly outputCsvPath?: string;
   readonly sourceManifestPath?: string;
   readonly minimumDecksPerPeriod?: number;
@@ -68,6 +71,8 @@ export function generateHistoricalCoverageReport(
 ): HistoricalCoverageReportSummary {
   const pipelineRunId = options.pipelineRunId ?? createPipelineRunId();
   const minimumDecksPerPeriod = options.minimumDecksPerPeriod ?? defaultMinimumDecksPerPeriod;
+  const minimumDecksPerSourcePeriod = options.minimumDecksPerSourcePeriod ?? 1;
+  const missingSourceWarningPolicy = options.missingSourceWarningPolicy ?? "warn";
   const outputCsvPath = options.outputCsvPath ?? defaultHistoricalCoverageCsvPath;
   const manifest = loadSourceCoverageManifest(options.sourceManifestPath);
   const assignmentSummary = assignDecksToMetagamePeriods(database);
@@ -108,7 +113,19 @@ export function generateHistoricalCoverageReport(
       const sourceStatus = sourceStatusFor(manifest, source, period);
       const coverageStatus = interpretCoverage(sourceTotal, sourceStatus);
       const sourceWarningCodes: HistoricalCoverageWarningType[] = [...periodWarningCodes];
-      if (sourceTotal === 0 && sourceStatus !== "available") {
+      if (sourceTotal > 0 && sourceTotal < minimumDecksPerSourcePeriod) {
+        sourceWarningCodes.push("thin_period");
+        warnings.push({
+          message: `${source} has ${sourceTotal} decklists for ${period.setName}, below the ${minimumDecksPerSourcePeriod} source/period minimum.`,
+          metadata: { deckCount: sourceTotal, minimumDecksPerSourcePeriod, sourceStatus },
+          periodId: period.periodId,
+          pipelineRunId,
+          severity: "warn",
+          source,
+          warningType: "thin_period"
+        });
+      }
+      if (sourceTotal === 0 && sourceStatus !== "available" && missingSourceWarningPolicy !== "ignore") {
         sourceWarningCodes.push("missing_source_coverage");
         warnings.push({
           message: `${source} coverage is ${sourceStatus} for ${period.setName}; zero decklists should be reviewed as missing coverage.`,
@@ -119,7 +136,7 @@ export function generateHistoricalCoverageReport(
           },
           periodId: period.periodId,
           pipelineRunId,
-          severity: "warn",
+          severity: missingSourceWarningPolicy,
           source,
           warningType: "missing_source_coverage"
         });
@@ -145,8 +162,10 @@ export function generateHistoricalCoverageReport(
 
   upsertPipelineRun(database, {
     completedAt: new Date().toISOString(),
-    configHash: stableConfigHash({
+    configHash: options.configHash ?? stableConfigHash({
       minimumDecksPerPeriod,
+      minimumDecksPerSourcePeriod,
+      missingSourceWarningPolicy,
       sourceManifestPath: options.sourceManifestPath ?? defaultSourceCoverageManifestPath
     }),
     id: pipelineRunId,

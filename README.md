@@ -110,7 +110,7 @@ pnpm dev -- config:save-profile --name historical-modern-v1 --config data/config
 pnpm dev -- db:configs
 ```
 
-Historical stages accept `--config path` and `--profile name`; CLI flags still take precedence over profile values. Effective historical configs are saved in SQLite as `historical:latest`, and pipeline runs persist the effective config hash in run lineage tables.
+Historical stages accept `--config path` and `--profile name`; CLI flags still take precedence over profile values. Effective historical configs are saved in SQLite as `historical:latest`, and pipeline runs persist the effective config hash in run lineage tables. The profile controls enabled sources, archive discovery, per-source include/exclude filters, unknown-date and out-of-range handling, and source coverage thresholds.
 
 Run the historical stages in order:
 

@@ -45,6 +45,11 @@ type MtgoDecklistData = {
 
 export const mtgoCollector: DeckCollector = {
   async collect(context) {
+    if (context.options.allowArchiveDiscovery === "false") {
+      context.logger.info("MTGO archive discovery disabled by collection policy.");
+      return [];
+    }
+
     const years = parseYears(context.options.years, context);
     const indexItems: MtgoDecklistIndexItem[] = [];
 

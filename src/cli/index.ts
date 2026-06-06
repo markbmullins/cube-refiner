@@ -5,6 +5,7 @@ import path from "node:path";
 import type { DatabaseSync } from "node:sqlite";
 
 import { evaluateCubeReconstruction, generateCandidatePools, generateCube, validateCube, validateHistoricalCube } from "../build/index.js";
+import type { CollectionDatePolicy, SourceCollectionPolicy } from "../collectors/index.js";
 import { runCollectors } from "../collectors/index.js";
 import {
   defaultHistoricalModernConfigPath,
@@ -57,7 +58,7 @@ if (command === "help" || command === "--help" || command === "-h") {
 
 Usage:
   cube-refiner help
-  cube-refiner pipeline:run [--db path] [--raw-dir path] [--output-dir path] [--skip-collect] [--scryfall-file path] [--fetch-scryfall] [--pipeline-run-id id] [--cube-run-id id] [--start-date YYYY-MM-DD] [--end-date YYYY-MM-DD]
+  cube-refiner pipeline:run [--db path] [--config path] [--profile name] [--raw-dir path] [--output-dir path] [--skip-collect] [--scryfall-file path] [--fetch-scryfall] [--pipeline-run-id id] [--cube-run-id id] [--start-date YYYY-MM-DD] [--end-date YYYY-MM-DD]
   cube-refiner db:init [--db path]
   cube-refiner db:migrate [--db path]
   cube-refiner db:status [--db path] [--json]
@@ -71,18 +72,18 @@ Usage:
   cube-refiner db:check [--db path] [--json]
   cube-refiner db:vacuum [--db path]
   cube-refiner db:reset [--db path] --force [--backup path]
-  cube-refiner collect:all [--db path] [--raw-dir path] [--refresh] [--start-date YYYY-MM-DD] [--end-date YYYY-MM-DD]
-  cube-refiner collect:mtgtop8 [--db path] [--raw-dir path] [--refresh] [--start-date YYYY-MM-DD] [--end-date YYYY-MM-DD]
-  cube-refiner collect:mtgo [--db path] [--raw-dir path] [--refresh] [--start-date YYYY-MM-DD] [--end-date YYYY-MM-DD]
-  cube-refiner collect:mtggoldfish [--db path] [--raw-dir path] [--refresh] [--events ids-or-urls] [--start-date YYYY-MM-DD] [--end-date YYYY-MM-DD]
+  cube-refiner collect:all [--db path] [--config path] [--profile name] [--raw-dir path] [--refresh] [--start-date YYYY-MM-DD] [--end-date YYYY-MM-DD]
+  cube-refiner collect:mtgtop8 [--db path] [--config path] [--profile name] [--raw-dir path] [--refresh] [--start-date YYYY-MM-DD] [--end-date YYYY-MM-DD]
+  cube-refiner collect:mtgo [--db path] [--config path] [--profile name] [--raw-dir path] [--refresh] [--start-date YYYY-MM-DD] [--end-date YYYY-MM-DD]
+  cube-refiner collect:mtggoldfish [--db path] [--config path] [--profile name] [--raw-dir path] [--refresh] [--events ids-or-urls] [--start-date YYYY-MM-DD] [--end-date YYYY-MM-DD]
   cube-refiner normalize:cards [--db path] [--scryfall-file path] [--fetch-scryfall] [--audit-csv path] [--fail-on-unknown]
   cube-refiner normalize:archetypes [--db path] [--mapping-file path] [--audit-csv path] [--fail-on-unmapped]
   cube-refiner dedupe:decks [--db path] [--report-csv path] [--near-overlap count]
-  cube-refiner periods:seed [--db path] [--set-releases-file path]
-  cube-refiner periods:generate [--db path] [--set-releases-file path] [--start-date YYYY-MM-DD] [--end-date YYYY-MM-DD] [--model standard-set-release]
+  cube-refiner periods:seed [--db path] [--config path] [--profile name] [--set-releases-file path]
+  cube-refiner periods:generate [--db path] [--config path] [--profile name] [--set-releases-file path] [--start-date YYYY-MM-DD] [--end-date YYYY-MM-DD] [--model standard-set-release]
   cube-refiner periods:list [--db path] [--json]
   cube-refiner periods:assign [--db path]
-  cube-refiner coverage:historical [--db path] [--output-csv path] [--source-manifest path] [--min-decks n] [--pipeline-run-id id]
+  cube-refiner coverage:historical [--db path] [--config path] [--profile name] [--output-csv path] [--source-manifest path] [--min-decks n] [--min-source-decks n] [--missing-source-policy ignore|warn|fail] [--pipeline-run-id id]
   cube-refiner matrix:build [--db path] [--matrix-csv path] [--archetypes-csv path] [--pipeline-run-id id]
   cube-refiner matrix:periods [--db path] [--card-period-csv path] [--archetype-period-csv path] [--pipeline-run-id id]
   cube-refiner score:cards [--db path] --pipeline-run-id id [--glue-threshold n] [--signpost-affinity n] [--signpost-exclusivity n] [--signpost-min-decks n]
@@ -105,6 +106,7 @@ Project paths:
 if (command === "pipeline:run") {
   const historicalConfig = loadCliHistoricalConfig();
   const summary = await runFullPipeline({
+    collectionDatePolicy: collectionDatePolicyFromConfig(historicalConfig.config),
     collectorOptions: {
       limitDecks: getOptionValue("--limit-decks"),
       limitEvents: getOptionValue("--limit-events"),
@@ -125,6 +127,8 @@ if (command === "pipeline:run") {
     refresh,
     scryfallFile: getOptionValue("--scryfall-file"),
     skipCollect: args.includes("--skip-collect"),
+    sourcePolicies: sourcePoliciesFromConfig(historicalConfig.config),
+    sources: historicalConfig.config.sources.enabledSources,
     totalCards: parsePositiveInteger(getOptionValue("--total-cards")),
     cubeRunId: getOptionValue("--cube-run-id"),
     validationRunId: getOptionValue("--validation-run-id")
@@ -148,6 +152,7 @@ if (command.startsWith("collect:")) {
 
   const historicalConfig = loadCliHistoricalConfig();
   const summaries = await runCollectors({
+    collectionDatePolicy: collectionDatePolicyFromConfig(historicalConfig.config),
     collectorOptions: {
       limitDecks: getOptionValue("--limit-decks"),
       limitEvents: getOptionValue("--limit-events"),
@@ -160,7 +165,8 @@ if (command.startsWith("collect:")) {
     databasePath,
     rawDataDir,
     refresh,
-    sources
+    sourcePolicies: sourcePoliciesFromConfig(historicalConfig.config),
+    sources: sources.filter((source) => historicalConfig.config.sources.enabledSources.includes(source))
   });
 
   for (const summary of summaries) {
@@ -320,7 +326,10 @@ if (command === "coverage:historical") {
     const historicalConfig = loadCliHistoricalConfig(database);
     saveEffectiveHistoricalConfig(database, historicalConfig.config, historicalConfig.configHash);
     const summary = generateHistoricalCoverageReport(database, {
+      configHash: historicalConfig.configHash,
       minimumDecksPerPeriod: parsePositiveInteger(getOptionValue("--min-decks")) ?? historicalConfig.config.coverage.minimumDecksPerPeriod,
+      minimumDecksPerSourcePeriod: parsePositiveInteger(getOptionValue("--min-source-decks")) ?? historicalConfig.config.coverage.minimumDecksPerSourcePeriod,
+      missingSourceWarningPolicy: parseMissingSourceWarningPolicy(getOptionValue("--missing-source-policy")) ?? historicalConfig.config.coverage.missingSourceWarningPolicy,
       outputCsvPath: getOptionValue("--output-csv") ?? historicalConfig.config.exports.historicalSourceCoverageCsv,
       pipelineRunId: getOptionValue("--pipeline-run-id"),
       sourceManifestPath: getOptionValue("--source-manifest") ?? historicalConfig.config.sources.sourceCoverageManifestPath
@@ -916,6 +925,28 @@ function saveEffectiveHistoricalConfig(database: DatabaseSync, config: Historica
   });
 }
 
+function collectionDatePolicyFromConfig(config: HistoricalModernConfig): CollectionDatePolicy {
+  return {
+    invalidDateHandling: config.sources.invalidDateHandling,
+    missingDateHandling: config.sources.unknownDateHandling,
+    outOfRangeHandling: config.sources.outOfRangeHandling
+  };
+}
+
+function sourcePoliciesFromConfig(config: HistoricalModernConfig): Partial<Record<DeckSource, SourceCollectionPolicy>> {
+  return Object.fromEntries(
+    config.sources.enabledSources.map((source) => [
+      source,
+      {
+        allowArchiveDiscovery: config.sources.perSource[source].allowArchiveDiscovery && config.sources.allowArchiveDiscovery,
+        discoveryOptions: config.sources.perSource[source].discoveryOptions,
+        exclude: config.sources.perSource[source].exclude,
+        include: config.sources.perSource[source].include
+      }
+    ])
+  );
+}
+
 function hasHistoricalConfigInput(): boolean {
   return getOptionValue("--config") !== undefined || getOptionValue("--profile") !== undefined;
 }
@@ -968,6 +999,18 @@ function parseCubeMode(value: string | undefined): "aggregate" | "historical" | 
   }
 
   console.error("cube:generate --mode must be aggregate or historical.");
+  process.exit(1);
+}
+
+function parseMissingSourceWarningPolicy(value: string | undefined): "ignore" | "warn" | "fail" | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (value === "ignore" || value === "warn" || value === "fail") {
+    return value;
+  }
+
+  console.error("coverage:historical --missing-source-policy must be ignore, warn, or fail.");
   process.exit(1);
 }
 

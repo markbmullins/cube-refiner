@@ -27,6 +27,11 @@ export type MtgGoldfishDeckLink = {
 
 export const mtgGoldfishCollector: DeckCollector = {
   async collect(context) {
+    if (context.options.allowArchiveDiscovery === "false" && !context.options.events) {
+      context.logger.info("MTGGoldfish default tournament discovery disabled by collection policy.");
+      return [];
+    }
+
     const years = parseYears(context.options.years, context);
     const tournamentUrls = applyLimit(parseTournamentInputs(context.options.events), context.options.limitEvents);
     context.logger.info(`MTGGoldfish tournament pages selected: ${tournamentUrls.length}`);
