@@ -87,7 +87,7 @@ Usage:
   cube-refiner matrix:build [--db path] [--matrix-csv path] [--archetypes-csv path] [--pipeline-run-id id]
   cube-refiner matrix:periods [--db path] [--card-period-csv path] [--archetype-period-csv path] [--pipeline-run-id id]
   cube-refiner score:cards [--db path] --pipeline-run-id id [--glue-threshold n] [--signpost-affinity n] [--signpost-exclusivity n] [--signpost-min-decks n]
-  cube-refiner score:historical [--db path] --pipeline-run-id id [--aggregate-pipeline-run-id id] [--era-share n] [--pillar-longevity n] [--pillar-peak n] [--icon-peak n] [--flash-peak n] [--flash-max-longevity n] [--weight-glue n] [--weight-longevity n] [--weight-peak n] [--weight-archetype n]
+  cube-refiner score:historical [--db path] [--config path] [--profile name] --pipeline-run-id id [--aggregate-pipeline-run-id id] [--era-share n] [--pillar-longevity n] [--pillar-peak n] [--icon-peak n] [--flash-peak n] [--flash-max-longevity n] [--weight-glue n] [--weight-longevity n] [--weight-peak n] [--weight-archetype n]
   cube-refiner candidates:generate [--db path] --pipeline-run-id id [--output-dir path]
   cube-refiner cube:generate [--db path] --pipeline-run-id id [--cube-run-id id] [--output-csv path] [--mode aggregate|historical] [--min-format-pillars n] [--min-archetype-icons n] [--min-periods n]
   cube-refiner cube:reconstruct [--db path] --cube-run-id id --pipeline-run-id id [--reconstruction-csv path] [--era-coverage-csv path] [--ecosystem-csv path]
@@ -451,6 +451,8 @@ if (command === "score:historical") {
       flashInPanReviewCsvPath: getOptionValue("--flash-review-csv") ?? historicalConfig.config.exports.flashInPanReviewCsv,
       formatPillarsCsvPath: getOptionValue("--format-pillars-csv") ?? historicalConfig.config.exports.formatPillarsCsv,
       historicalCardsRankedCsvPath: getOptionValue("--historical-cards-ranked-csv") ?? historicalConfig.config.exports.historicalCardsRankedCsv,
+      manualOverrides: historicalConfig.config.scoring.manualOverrides,
+      normalization: historicalConfig.config.scoring.normalization,
       pipelineRunId,
       thresholds: {
         eraShare: parseNumberOption(getOptionValue("--era-share")) ?? historicalConfig.config.scoring.thresholds.eraShare,
@@ -464,7 +466,10 @@ if (command === "score:historical") {
         archetypeImportance: parseNumberOption(getOptionValue("--weight-archetype")) ?? historicalConfig.config.scoring.weights.archetypeImportance,
         glue: parseNumberOption(getOptionValue("--weight-glue")) ?? historicalConfig.config.scoring.weights.glue,
         longevity: parseNumberOption(getOptionValue("--weight-longevity")) ?? historicalConfig.config.scoring.weights.longevity,
-        peak: parseNumberOption(getOptionValue("--weight-peak")) ?? historicalConfig.config.scoring.weights.peak
+        parasitic: historicalConfig.config.scoring.weights.parasitic,
+        peak: parseNumberOption(getOptionValue("--weight-peak")) ?? historicalConfig.config.scoring.weights.peak,
+        periodVariancePenalty: historicalConfig.config.scoring.weights.periodVariancePenalty,
+        signpost: historicalConfig.config.scoring.weights.signpost
       }
     });
     console.log(`Scored ${summary.scoreRows} historical cards for run ${summary.pipelineRunId}.`);

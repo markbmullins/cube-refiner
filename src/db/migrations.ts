@@ -539,6 +539,14 @@ ALTER TABLE raw_decks ADD COLUMN active INTEGER NOT NULL DEFAULT 1;
 ALTER TABLE raw_decks ADD COLUMN collection_status TEXT NOT NULL DEFAULT 'active';
 CREATE INDEX IF NOT EXISTS idx_raw_decks_active_status ON raw_decks(active, collection_status);
 `
+  },
+  {
+    description: "Historical score config hashes",
+    id: "0012_historical_score_config_hashes",
+    sql: `
+ALTER TABLE historical_card_scores ADD COLUMN config_hash TEXT NOT NULL DEFAULT '';
+CREATE INDEX IF NOT EXISTS idx_historical_card_scores_config_hash ON historical_card_scores(config_hash);
+`
   }
 ];
 

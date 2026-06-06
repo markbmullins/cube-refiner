@@ -40,7 +40,12 @@ describe("historical Modern config profiles", () => {
     expect(() =>
       validateHistoricalModernConfig({
         ...loadHistoricalModernConfig().config,
-        scoring: { thresholds: loadHistoricalModernConfig().config.scoring.thresholds, weights: { glue: 0.2 } }
+        scoring: {
+          manualOverrides: [],
+          normalization: loadHistoricalModernConfig().config.scoring.normalization,
+          thresholds: loadHistoricalModernConfig().config.scoring.thresholds,
+          weights: { glue: 0.2 }
+        }
       })
     ).toThrow(/scoring.weights.archetypeImportance/);
   });

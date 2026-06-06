@@ -223,6 +223,7 @@ export type HistoricalCardRole = "format_pillar" | "archetype_icon" | "flash_in_
 
 export type HistoricalCardScoreRow = {
   readonly pipelineRunId: string;
+  readonly configHash?: string;
   readonly cardName: string;
   readonly eraScore: number;
   readonly peakScore: number;

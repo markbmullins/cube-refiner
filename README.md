@@ -110,7 +110,7 @@ pnpm dev -- config:save-profile --name historical-modern-v1 --config data/config
 pnpm dev -- db:configs
 ```
 
-Historical stages accept `--config path` and `--profile name`; CLI flags still take precedence over profile values. Effective historical configs are saved in SQLite as `historical:latest`, and pipeline runs persist the effective config hash in run lineage tables. The profile controls enabled sources, archive discovery, per-source include/exclude filters, unknown-date and out-of-range handling, and source coverage thresholds.
+Historical stages accept `--config path` and `--profile name`; CLI flags still take precedence over profile values. Effective historical configs are saved in SQLite as `historical:latest`, and pipeline runs persist the effective config hash in run lineage tables. The profile controls enabled sources, archive discovery, per-source include/exclude filters, unknown-date and out-of-range handling, source coverage thresholds, historical scoring normalization, role thresholds, score weights, and manual historical role overrides.
 
 Run the historical stages in order:
 
@@ -267,7 +267,7 @@ pnpm dev -- score:historical --pipeline-run-id <period-matrix-run-id>
 pnpm dev -- score:historical --pipeline-run-id <period-matrix-run-id> --era-share 0.05 --pillar-longevity 0.5 --icon-peak 0.18 --weight-longevity 0.35 --weight-peak 0.30
 ```
 
-Historical scoring writes `historical_cards_ranked.csv`, `format_pillars.csv`, `archetype_icons.csv`, and `flash_in_pan_review.csv` from persisted `card_period_matrix` rows. The score blends aggregate glue when available with longevity, peak metagame share, and archetype importance rather than replacing the current card scores.
+Historical scoring writes `historical_cards_ranked.csv`, `format_pillars.csv`, `archetype_icons.csv`, and `flash_in_pan_review.csv` from persisted `card_period_matrix` rows. The score blends aggregate glue when available with longevity, peak metagame share, archetype importance, and optional period variance penalties rather than replacing the current card scores. Saved configs can also force manual card roles or score adjustments; explanations include the thresholds and overrides that caused each classification.
 
 Generate explainable candidate pools for cube construction:
 

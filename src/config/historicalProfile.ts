@@ -11,6 +11,20 @@ export type HistoricalDatePolicy = "event_date_required";
 export type HistoricalCollectorSource = "mtgtop8" | "mtgo" | "mtggoldfish";
 export type HistoricalCollectionDateHandling = "discard" | "quarantine" | "persist_inactive";
 export type HistoricalMissingSourceWarningPolicy = "ignore" | "warn" | "fail";
+export type HistoricalScoringNormalizationConfig = {
+  readonly eraScore: "count" | "share";
+  readonly peakScore: "raw" | "sqrt";
+  readonly longevityScore: "share" | "count";
+  readonly periodVariance: "tracked" | "penalty";
+};
+export type HistoricalScoreManualOverride = {
+  readonly cardName: string;
+  readonly role?: "format_pillar" | "archetype_icon" | "flash_in_the_pan" | "role_player";
+  readonly include?: boolean;
+  readonly exclude?: boolean;
+  readonly scoreAdjustment?: number;
+  readonly reason?: string;
+};
 
 export type HistoricalPerSourcePolicy = {
   readonly allowArchiveDiscovery: boolean;
@@ -48,6 +62,7 @@ export type HistoricalModernConfig = {
     readonly missingSourceWarningPolicy: HistoricalMissingSourceWarningPolicy;
   };
   readonly scoring: {
+    readonly normalization: HistoricalScoringNormalizationConfig;
     readonly thresholds: {
       readonly eraShare: number;
       readonly pillarLongevity: number;
@@ -61,7 +76,11 @@ export type HistoricalModernConfig = {
       readonly longevity: number;
       readonly peak: number;
       readonly archetypeImportance: number;
+      readonly periodVariancePenalty: number;
+      readonly signpost: number;
+      readonly parasitic: number;
     };
+    readonly manualOverrides: readonly HistoricalScoreManualOverride[];
   };
   readonly archetypeReconstruction: {
     readonly coreShare: number;
@@ -139,6 +158,7 @@ export function validateHistoricalModernConfig(value: unknown): HistoricalModern
   const coverage = requireRecord(config.coverage, "coverage");
   const setReleaseCalendar = requireRecord(config.setReleaseCalendar, "setReleaseCalendar");
   const scoring = requireRecord(config.scoring, "scoring");
+  const normalization = requireRecord(scoring.normalization, "scoring.normalization");
   const thresholds = requireRecord(scoring.thresholds, "scoring.thresholds");
   const weights = requireRecord(scoring.weights, "scoring.weights");
   const archetypeReconstruction = requireRecord(config.archetypeReconstruction, "archetypeReconstruction");
@@ -212,6 +232,13 @@ export function validateHistoricalModernConfig(value: unknown): HistoricalModern
       name: requireString(project.name, "project.name")
     },
     scoring: {
+      manualOverrides: requireManualOverrides(scoring.manualOverrides),
+      normalization: {
+        eraScore: requireStringUnion(normalization.eraScore, "scoring.normalization.eraScore", ["count", "share"]),
+        longevityScore: requireStringUnion(normalization.longevityScore, "scoring.normalization.longevityScore", ["share", "count"]),
+        peakScore: requireStringUnion(normalization.peakScore, "scoring.normalization.peakScore", ["raw", "sqrt"]),
+        periodVariance: requireStringUnion(normalization.periodVariance, "scoring.normalization.periodVariance", ["tracked", "penalty"])
+      },
       thresholds: {
         eraShare: requireNumber(thresholds.eraShare, "scoring.thresholds.eraShare"),
         flashMaxLongevity: requireNumber(thresholds.flashMaxLongevity, "scoring.thresholds.flashMaxLongevity"),
@@ -224,7 +251,10 @@ export function validateHistoricalModernConfig(value: unknown): HistoricalModern
         archetypeImportance: requireNumber(weights.archetypeImportance, "scoring.weights.archetypeImportance"),
         glue: requireNumber(weights.glue, "scoring.weights.glue"),
         longevity: requireNumber(weights.longevity, "scoring.weights.longevity"),
-        peak: requireNumber(weights.peak, "scoring.weights.peak")
+        parasitic: requireNumber(weights.parasitic, "scoring.weights.parasitic"),
+        peak: requireNumber(weights.peak, "scoring.weights.peak"),
+        periodVariancePenalty: requireNumber(weights.periodVariancePenalty, "scoring.weights.periodVariancePenalty"),
+        signpost: requireNumber(weights.signpost, "scoring.weights.signpost")
       }
     },
     setReleaseCalendar: {
@@ -354,6 +384,29 @@ function requireMissingSourceWarningPolicy(value: unknown, name: string): Histor
     throw new Error(`Unsupported missing source warning policy: ${policy}`);
   }
   return policy;
+}
+
+function requireStringUnion<T extends string>(value: unknown, name: string, allowed: readonly T[]): T {
+  const entry = requireString(value, name);
+  if (!allowed.includes(entry as T)) {
+    throw new Error(`Historical config ${name} must be one of: ${allowed.join(", ")}.`);
+  }
+  return entry as T;
+}
+
+function requireManualOverrides(value: unknown): readonly HistoricalScoreManualOverride[] {
+  return requireArray(value, "scoring.manualOverrides").map((entry, index) => {
+    const record = requireRecord(entry, `scoring.manualOverrides[${index}]`);
+    const role = record.role === undefined ? undefined : requireStringUnion(record.role, `scoring.manualOverrides[${index}].role`, ["format_pillar", "archetype_icon", "flash_in_the_pan", "role_player"]);
+    return {
+      cardName: requireString(record.cardName, `scoring.manualOverrides[${index}].cardName`),
+      exclude: record.exclude === undefined ? undefined : requireBoolean(record.exclude, `scoring.manualOverrides[${index}].exclude`),
+      include: record.include === undefined ? undefined : requireBoolean(record.include, `scoring.manualOverrides[${index}].include`),
+      reason: record.reason === undefined ? undefined : requireString(record.reason, `scoring.manualOverrides[${index}].reason`),
+      role,
+      scoreAdjustment: record.scoreAdjustment === undefined ? undefined : requireNumber(record.scoreAdjustment, `scoring.manualOverrides[${index}].scoreAdjustment`)
+    };
+  });
 }
 
 function requirePerSourcePolicy(value: unknown): Readonly<Record<HistoricalCollectorSource, HistoricalPerSourcePolicy>> {

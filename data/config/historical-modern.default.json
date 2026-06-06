@@ -49,6 +49,12 @@
     "missingSourceWarningPolicy": "warn"
   },
   "scoring": {
+    "normalization": {
+      "eraScore": "count",
+      "peakScore": "raw",
+      "longevityScore": "share",
+      "periodVariance": "tracked"
+    },
     "thresholds": {
       "eraShare": 0.05,
       "pillarLongevity": 0.5,
@@ -61,8 +67,12 @@
       "glue": 0.2,
       "longevity": 0.35,
       "peak": 0.3,
-      "archetypeImportance": 0.15
-    }
+      "archetypeImportance": 0.15,
+      "periodVariancePenalty": 0,
+      "signpost": 0,
+      "parasitic": 0
+    },
+    "manualOverrides": []
   },
   "archetypeReconstruction": {
     "coreShare": 0.2,

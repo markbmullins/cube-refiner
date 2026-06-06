@@ -1545,16 +1545,17 @@ export function replaceHistoricalCardScoreRows(
     database.prepare("DELETE FROM historical_card_scores WHERE pipeline_run_id = ?").run(pipelineRunId);
     const insert = database.prepare(
       `INSERT INTO historical_card_scores (
-        pipeline_run_id, card_name, era_score, peak_score, longevity_score,
+        pipeline_run_id, config_hash, card_name, era_score, peak_score, longevity_score,
         period_variance, archetype_importance_score, glue_score,
         modern_legacy_score, historical_role, explanation, config_json
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     );
 
     for (const row of rows) {
       insert.run(
         row.pipelineRunId,
+        row.configHash ?? stableId("historical-score-config", JSON.stringify(row.config)),
         row.cardName,
         row.eraScore,
         row.peakScore,
@@ -1602,6 +1603,7 @@ export function listHistoricalCardScoreRows(
   return rows.map((row) => ({
     archetypeImportanceScore: Number(row.archetype_importance_score),
     cardName: String(row.card_name),
+    configHash: String(row.config_hash),
     config: parseJson(String(row.config_json), {}),
     eraScore: Number(row.era_score),
     explanation: String(row.explanation),
