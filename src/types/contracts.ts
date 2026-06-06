@@ -241,6 +241,7 @@ export type ReconstructionTargetRole = "core" | "support" | "glue" | "signpost" 
 
 export type ArchetypeReconstructionTargetRow = {
   readonly pipelineRunId: string;
+  readonly configHash?: string;
   readonly periodId: string;
   readonly archetypeFamily: string;
   readonly cardName: string;
@@ -251,6 +252,7 @@ export type ArchetypeReconstructionTargetRow = {
 export type CubeArchetypeReconstructionRow = {
   readonly cubeRunId: string;
   readonly pipelineRunId: string;
+  readonly configHash?: string;
   readonly periodId: string;
   readonly archetypeFamily: string;
   readonly reconstructionScore: number;
@@ -265,6 +267,7 @@ export type CubeArchetypeReconstructionRow = {
 export type EcosystemDiversitySummaryRow = {
   readonly cubeRunId: string;
   readonly pipelineRunId: string;
+  readonly configHash?: string;
   readonly archetypesAboveThreshold: number;
   readonly periodsRepresented: number;
   readonly sharedCardEfficiency: number;

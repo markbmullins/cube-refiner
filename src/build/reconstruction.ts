@@ -21,6 +21,31 @@ export type ReconstructionConfig = {
   readonly supportShare: number;
   readonly signpostShare: number;
   readonly reconstructionThreshold: number;
+  readonly configHash?: string;
+  readonly enabledArchetypeFamilies: readonly string[];
+  readonly disabledArchetypeFamilies: readonly string[];
+  readonly sharedGlueBonus: number;
+  readonly parasiticPackageCaps: Readonly<Record<string, number>>;
+  readonly manualOverrides: readonly {
+    readonly archetypeFamily: string;
+    readonly cardName: string;
+    readonly targetRole: ReconstructionTargetRole;
+    readonly periodId?: string;
+    readonly importance?: number;
+  }[];
+  readonly perArchetype: Readonly<Record<string, {
+    readonly minimumReconstructionScore?: number;
+    readonly minimumCoreCards?: number;
+    readonly minimumSupportCards?: number;
+    readonly minimumSignposts?: number;
+    readonly periodIds?: readonly string[];
+  }>>;
+  readonly ecosystemDiversity: {
+    readonly minimumReconstructedArchetypeFamilies: number;
+    readonly minimumRepresentedPeriods: number;
+    readonly minimumSharedCardEfficiency: number;
+    readonly maximumSingleArchetypeDominance: number;
+  };
 };
 
 export type EvaluateCubeReconstructionOptions = Partial<ReconstructionConfig> & {
@@ -43,7 +68,19 @@ export type EvaluateCubeReconstructionSummary = {
 
 const defaultConfig: ReconstructionConfig = {
   coreShare: 0.2,
+  disabledArchetypeFamilies: [],
+  ecosystemDiversity: {
+    maximumSingleArchetypeDominance: 1,
+    minimumReconstructedArchetypeFamilies: 1,
+    minimumRepresentedPeriods: 1,
+    minimumSharedCardEfficiency: 0
+  },
+  enabledArchetypeFamilies: [],
+  manualOverrides: [],
+  parasiticPackageCaps: {},
+  perArchetype: {},
   reconstructionThreshold: 0.5,
+  sharedGlueBonus: 0,
   signpostShare: 0.15,
   supportShare: 0.08
 };
@@ -85,7 +122,18 @@ export function evaluateCubeReconstruction(
 function mergeConfig(options: Partial<ReconstructionConfig>): ReconstructionConfig {
   return {
     coreShare: options.coreShare ?? defaultConfig.coreShare,
+    configHash: options.configHash,
+    disabledArchetypeFamilies: options.disabledArchetypeFamilies ?? defaultConfig.disabledArchetypeFamilies,
+    ecosystemDiversity: {
+      ...defaultConfig.ecosystemDiversity,
+      ...(options.ecosystemDiversity ?? {})
+    },
+    enabledArchetypeFamilies: options.enabledArchetypeFamilies ?? defaultConfig.enabledArchetypeFamilies,
+    manualOverrides: options.manualOverrides ?? defaultConfig.manualOverrides,
+    parasiticPackageCaps: options.parasiticPackageCaps ?? defaultConfig.parasiticPackageCaps,
+    perArchetype: options.perArchetype ?? defaultConfig.perArchetype,
     reconstructionThreshold: options.reconstructionThreshold ?? defaultConfig.reconstructionThreshold,
+    sharedGlueBonus: options.sharedGlueBonus ?? defaultConfig.sharedGlueBonus,
     signpostShare: options.signpostShare ?? defaultConfig.signpostShare,
     supportShare: options.supportShare ?? defaultConfig.supportShare
   };
@@ -94,18 +142,38 @@ function mergeConfig(options: Partial<ReconstructionConfig>): ReconstructionConf
 export function deriveReconstructionTargets(
   rows: readonly CardPeriodMatrixRow[],
   pipelineRunId: string,
-  config: ReconstructionConfig = defaultConfig
+  options: Partial<ReconstructionConfig> = defaultConfig
 ): readonly ArchetypeReconstructionTargetRow[] {
-  return rows.flatMap((row) =>
-    row.archetypeFamilies.map((archetypeFamily) => ({
-      archetypeFamily,
-      cardName: row.cardName,
-      importance: importanceFor(row, config),
-      periodId: row.periodId,
-      pipelineRunId,
-      targetRole: roleFor(row, config)
-    }))
+  const config = mergeConfig(options);
+  const derived = rows.flatMap((row) =>
+    row.archetypeFamilies
+      .filter((archetypeFamily) => isArchetypeEnabled(archetypeFamily, row.periodId, config))
+      .map((archetypeFamily) => {
+        const role = roleFor(row, config);
+        return {
+          archetypeFamily,
+          cardName: row.cardName,
+          configHash: config.configHash,
+          importance: importanceFor(row, config),
+          periodId: row.periodId,
+          pipelineRunId,
+          targetRole: role
+        };
+      })
   );
+  const manualTargets = config.manualOverrides.flatMap((override) => {
+    const periodIds = override.periodId ? [override.periodId] : unique(derived.filter((target) => target.archetypeFamily === override.archetypeFamily).map((target) => target.periodId));
+    return periodIds.map((periodId) => ({
+      archetypeFamily: override.archetypeFamily,
+      cardName: override.cardName,
+      configHash: config.configHash,
+      importance: override.importance ?? 1,
+      periodId,
+      pipelineRunId,
+      targetRole: override.targetRole
+    }));
+  });
+  return dedupeTargets([...derived, ...manualTargets]);
 }
 
 export function evaluateTargetsForCube(
@@ -113,11 +181,12 @@ export function evaluateTargetsForCube(
   cubeCards: ReadonlySet<string>,
   cubeRunId: string,
   pipelineRunId: string,
-  config: ReconstructionConfig = defaultConfig
+  options: Partial<ReconstructionConfig> = defaultConfig
 ): {
   readonly rows: readonly CubeArchetypeReconstructionRow[];
   readonly summary: EcosystemDiversitySummaryRow;
 } {
+  const config = mergeConfig(options);
   const grouped = new Map<string, ArchetypeReconstructionTargetRow[]>();
   for (const target of targets) {
     const key = `${target.periodId}\0${target.archetypeFamily}`;
@@ -134,8 +203,22 @@ export function evaluateTargetsForCube(
       .map((target) => target.cardName)
       .sort((left, right) => left.localeCompare(right));
     const reconstructionScore = totalImportance === 0 ? 0 : includedImportance / totalImportance;
+    const archetypeConfig = config.perArchetype[archetypeFamily] ?? {};
+    const includedCoreCards = included.filter((target) => target.targetRole === "core").length;
+    const includedSupportCards = included.filter((target) => target.targetRole === "support").length;
+    const includedSignposts = included.filter((target) => target.targetRole === "signpost").length;
+    const threshold = archetypeConfig.minimumReconstructionScore ?? config.reconstructionThreshold;
+    const warnings = [
+      ...(missingCoreCards.length > 0 ? [`Missing core cards: ${missingCoreCards.join("|")}`] : []),
+      ...(reconstructionScore < threshold ? [`${archetypeFamily} below configured reconstruction score ${formatNumber(threshold)}`] : []),
+      ...(includedCoreCards < (archetypeConfig.minimumCoreCards ?? 0) ? [`${archetypeFamily} below configured core card minimum ${archetypeConfig.minimumCoreCards}`] : []),
+      ...(includedSupportCards < (archetypeConfig.minimumSupportCards ?? 0) ? [`${archetypeFamily} below configured support card minimum ${archetypeConfig.minimumSupportCards}`] : []),
+      ...(includedSignposts < (archetypeConfig.minimumSignposts ?? 0) ? [`${archetypeFamily} below configured signpost minimum ${archetypeConfig.minimumSignposts}`] : []),
+      ...parasiticWarnings(group, included, config)
+    ];
     return {
       archetypeFamily,
+      configHash: config.configHash,
       cubeRunId,
       includedImportance,
       includedTargets: included.length,
@@ -145,11 +228,11 @@ export function evaluateTargetsForCube(
       reconstructionScore,
       totalImportance,
       totalTargets: group.length,
-      warnings: missingCoreCards.length > 0 ? [`Missing core cards: ${missingCoreCards.join("|")}`] : []
+      warnings
     };
   });
 
-  const representedRows = rows.filter((row) => row.reconstructionScore >= config.reconstructionThreshold);
+  const representedRows = rows.filter((row) => row.reconstructionScore >= (config.perArchetype[row.archetypeFamily]?.minimumReconstructionScore ?? config.reconstructionThreshold));
   const sharedIncludedCards = new Set(
     targets
       .filter((target) => cubeCards.has(target.cardName))
@@ -159,20 +242,43 @@ export function evaluateTargetsForCube(
       }, [] as string[])
   );
   const includedTargetCards = new Set(targets.filter((target) => cubeCards.has(target.cardName)).map((target) => target.cardName));
+  const archetypeIncludedCounts = countIncludedByArchetype(targets, cubeCards);
+  const totalIncludedTargets = [...archetypeIncludedCounts.values()].reduce((total, count) => total + count, 0);
+  const singleArchetypeDominance = totalIncludedTargets === 0 ? 0 : Math.max(0, ...archetypeIncludedCounts.values()) / totalIncludedTargets;
 
   return {
     rows: rows.sort((left, right) => left.periodId.localeCompare(right.periodId) || left.archetypeFamily.localeCompare(right.archetypeFamily)),
     summary: {
       archetypesAboveThreshold: new Set(representedRows.map((row) => row.archetypeFamily)).size,
+      configHash: config.configHash,
       cubeRunId,
       periodsRepresented: new Set(representedRows.map((row) => row.periodId)).size,
       pipelineRunId,
       sharedCardEfficiency: includedTargetCards.size === 0 ? 0 : sharedIncludedCards.size / includedTargetCards.size,
       summary: {
-        reconstructionThreshold: config.reconstructionThreshold
+        ecosystemWarnings: ecosystemWarnings(
+          new Set(representedRows.map((row) => row.archetypeFamily)).size,
+          new Set(representedRows.map((row) => row.periodId)).size,
+          includedTargetCards.size === 0 ? 0 : sharedIncludedCards.size / includedTargetCards.size,
+          singleArchetypeDominance,
+          config
+        ),
+        reconstructionThreshold: config.reconstructionThreshold,
+        singleArchetypeDominance
       }
     }
   };
+}
+
+function isArchetypeEnabled(archetypeFamily: string, periodId: string, config: ReconstructionConfig): boolean {
+  if (config.enabledArchetypeFamilies.length > 0 && !config.enabledArchetypeFamilies.includes(archetypeFamily)) {
+    return false;
+  }
+  if (config.disabledArchetypeFamilies.includes(archetypeFamily)) {
+    return false;
+  }
+  const periodIds = config.perArchetype[archetypeFamily]?.periodIds;
+  return !periodIds || periodIds.includes(periodId);
 }
 
 function roleFor(row: CardPeriodMatrixRow, config: ReconstructionConfig): ReconstructionTargetRole {
@@ -194,7 +300,46 @@ function roleFor(row: CardPeriodMatrixRow, config: ReconstructionConfig): Recons
 function importanceFor(row: CardPeriodMatrixRow, config: ReconstructionConfig): number {
   const role = roleFor(row, config);
   const roleMultiplier = role === "core" ? 1 : role === "signpost" ? 0.85 : role === "glue" ? 0.75 : role === "support" ? 0.55 : 0.25;
-  return row.metagameShare * roleMultiplier;
+  return row.metagameShare * roleMultiplier + (role === "glue" ? config.sharedGlueBonus : 0);
+}
+
+function dedupeTargets(targets: readonly ArchetypeReconstructionTargetRow[]): readonly ArchetypeReconstructionTargetRow[] {
+  return [...new Map(targets.map((target) => [`${target.periodId}\0${target.archetypeFamily}\0${target.cardName}`, target])).values()];
+}
+
+function parasiticWarnings(group: readonly ArchetypeReconstructionTargetRow[], included: readonly ArchetypeReconstructionTargetRow[], config: ReconstructionConfig): readonly string[] {
+  const cap = config.parasiticPackageCaps[group[0]?.archetypeFamily ?? ""];
+  if (cap === undefined) {
+    return [];
+  }
+  return included.length > cap ? [`${group[0]?.archetypeFamily ?? "Archetype"} exceeds configured parasitic package cap ${cap}`] : [];
+}
+
+function countIncludedByArchetype(targets: readonly ArchetypeReconstructionTargetRow[], cubeCards: ReadonlySet<string>): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const target of targets.filter((entry) => cubeCards.has(entry.cardName))) {
+    counts.set(target.archetypeFamily, (counts.get(target.archetypeFamily) ?? 0) + 1);
+  }
+  return counts;
+}
+
+function ecosystemWarnings(
+  reconstructedArchetypes: number,
+  representedPeriods: number,
+  sharedEfficiency: number,
+  singleArchetypeDominance: number,
+  config: ReconstructionConfig
+): readonly string[] {
+  return [
+    ...(reconstructedArchetypes < config.ecosystemDiversity.minimumReconstructedArchetypeFamilies ? [`Reconstructed archetypes below configured minimum ${config.ecosystemDiversity.minimumReconstructedArchetypeFamilies}`] : []),
+    ...(representedPeriods < config.ecosystemDiversity.minimumRepresentedPeriods ? [`Represented periods below configured minimum ${config.ecosystemDiversity.minimumRepresentedPeriods}`] : []),
+    ...(sharedEfficiency < config.ecosystemDiversity.minimumSharedCardEfficiency ? [`Shared-card efficiency below configured minimum ${formatNumber(config.ecosystemDiversity.minimumSharedCardEfficiency)}`] : []),
+    ...(singleArchetypeDominance > config.ecosystemDiversity.maximumSingleArchetypeDominance ? [`Single-archetype dominance above configured maximum ${formatNumber(config.ecosystemDiversity.maximumSingleArchetypeDominance)}`] : [])
+  ];
+}
+
+function unique(values: readonly string[]): readonly string[] {
+  return [...new Set(values)];
 }
 
 function writeReconstructionCsv(filePath: string, rows: readonly CubeArchetypeReconstructionRow[]): void {

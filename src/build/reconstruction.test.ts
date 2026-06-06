@@ -68,6 +68,69 @@ describe("archetype reconstruction", () => {
     expect(result.rows.flatMap((row) => row.warnings)).toContain("Missing core cards: Tarmogoyf");
     expect(result.rows.flatMap((row) => row.warnings)).toContain("Missing core cards: Birthing Pod");
   });
+
+  it("applies per-archetype thresholds, manual targets, glue bonuses, and parasitic caps", () => {
+    const targets = deriveReconstructionTargets(periodRows, "period-run", {
+      configHash: "reconstruction-config",
+      enabledArchetypeFamilies: ["Jund", "Twin"],
+      manualOverrides: [
+        {
+          archetypeFamily: "Twin",
+          cardName: "Pestermite",
+          importance: 1,
+          periodId: "p1",
+          targetRole: "support"
+        }
+      ],
+      perArchetype: {
+        Twin: {
+          minimumReconstructionScore: 0.9,
+          minimumSupportCards: 2,
+          minimumSignposts: 1
+        }
+      },
+      sharedGlueBonus: 0.2
+    });
+    const result = evaluateTargetsForCube(targets, new Set(["Lightning Bolt", "Splinter Twin"]), "cube-run", "period-run", {
+      configHash: "reconstruction-config",
+      ecosystemDiversity: {
+        maximumSingleArchetypeDominance: 0.5,
+        minimumReconstructedArchetypeFamilies: 2,
+        minimumRepresentedPeriods: 1,
+        minimumSharedCardEfficiency: 0.5
+      },
+      parasiticPackageCaps: {
+        Twin: 1
+      },
+      perArchetype: {
+        Twin: {
+          minimumReconstructionScore: 0.9,
+          minimumSupportCards: 2,
+          minimumSignposts: 1
+        }
+      }
+    });
+
+    expect(targets.map((target) => target.archetypeFamily)).not.toContain("Pod");
+    expect(targets.find((target) => target.cardName === "Pestermite")).toEqual(
+      expect.objectContaining({ configHash: "reconstruction-config", targetRole: "support" })
+    );
+    expect(targets.find((target) => target.cardName === "Lightning Bolt")?.importance).toBeGreaterThan(0.2);
+    expect(result.rows.find((row) => row.archetypeFamily === "Twin")?.warnings).toEqual(
+      expect.arrayContaining([
+        "Twin below configured reconstruction score 0.9",
+        "Twin below configured support card minimum 2",
+        "Twin below configured signpost minimum 1",
+        "Twin exceeds configured parasitic package cap 1"
+      ])
+    );
+    expect(result.summary.configHash).toBe("reconstruction-config");
+    expect(result.summary.summary).toEqual(
+      expect.objectContaining({
+        ecosystemWarnings: expect.arrayContaining(["Reconstructed archetypes below configured minimum 2"])
+      })
+    );
+  });
 });
 
 const periodRows: readonly CardPeriodMatrixRow[] = [

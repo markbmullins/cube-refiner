@@ -78,7 +78,19 @@
     "coreShare": 0.2,
     "supportShare": 0.08,
     "signpostShare": 0.15,
-    "reconstructionThreshold": 0.5
+    "reconstructionThreshold": 0.5,
+    "enabledArchetypeFamilies": [],
+    "disabledArchetypeFamilies": [],
+    "sharedGlueBonus": 0,
+    "parasiticPackageCaps": {},
+    "manualOverrides": [],
+    "perArchetype": {},
+    "ecosystemDiversity": {
+      "minimumReconstructedArchetypeFamilies": 1,
+      "minimumRepresentedPeriods": 1,
+      "minimumSharedCardEfficiency": 0,
+      "maximumSingleArchetypeDominance": 1
+    }
   },
   "cubeGeneration": {
     "mode": "historical",

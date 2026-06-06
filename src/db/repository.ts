@@ -1627,12 +1627,12 @@ export function replaceArchetypeReconstructionTargets(
     database.prepare("DELETE FROM archetype_reconstruction_targets WHERE pipeline_run_id = ?").run(pipelineRunId);
     const insert = database.prepare(
       `INSERT INTO archetype_reconstruction_targets (
-        pipeline_run_id, period_id, archetype_family, card_name, target_role, importance
+        pipeline_run_id, config_hash, period_id, archetype_family, card_name, target_role, importance
       )
-      VALUES (?, ?, ?, ?, ?, ?)`
+      VALUES (?, ?, ?, ?, ?, ?, ?)`
     );
     for (const row of rows) {
-      insert.run(row.pipelineRunId, row.periodId, row.archetypeFamily, row.cardName, row.targetRole, row.importance);
+      insert.run(row.pipelineRunId, row.configHash ?? "", row.periodId, row.archetypeFamily, row.cardName, row.targetRole, row.importance);
     }
     database.exec("COMMIT;");
   } catch (error) {
@@ -1649,6 +1649,7 @@ export function listArchetypeReconstructionTargets(
     .prepare(
       `SELECT
         pipeline_run_id AS pipelineRunId,
+        config_hash AS configHash,
         period_id AS periodId,
         archetype_family AS archetypeFamily,
         card_name AS cardName,
@@ -1663,6 +1664,7 @@ export function listArchetypeReconstructionTargets(
   return rows.map((row) => ({
     archetypeFamily: String(row.archetypeFamily),
     cardName: String(row.cardName),
+    configHash: String(row.configHash),
     importance: Number(row.importance),
     periodId: String(row.periodId),
     pipelineRunId: String(row.pipelineRunId),
@@ -1684,16 +1686,17 @@ export function replaceCubeArchetypeReconstructionRows(
 
     const insertRow = database.prepare(
       `INSERT INTO cube_archetype_reconstruction (
-        cube_run_id, pipeline_run_id, period_id, archetype_family, reconstruction_score,
+        cube_run_id, pipeline_run_id, config_hash, period_id, archetype_family, reconstruction_score,
         total_importance, included_importance, total_targets, included_targets,
         missing_core_cards_json, warnings_json
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     );
     for (const row of rows) {
       insertRow.run(
         row.cubeRunId,
         row.pipelineRunId,
+        row.configHash ?? "",
         row.periodId,
         row.archetypeFamily,
         row.reconstructionScore,
@@ -1709,14 +1712,15 @@ export function replaceCubeArchetypeReconstructionRows(
     database
       .prepare(
         `INSERT INTO ecosystem_diversity_summaries (
-          cube_run_id, pipeline_run_id, archetypes_above_threshold,
+          cube_run_id, pipeline_run_id, config_hash, archetypes_above_threshold,
           periods_represented, shared_card_efficiency, summary_json
         )
-        VALUES (?, ?, ?, ?, ?, ?)`
+        VALUES (?, ?, ?, ?, ?, ?, ?)`
       )
       .run(
         summary.cubeRunId,
         summary.pipelineRunId,
+        summary.configHash ?? "",
         summary.archetypesAboveThreshold,
         summary.periodsRepresented,
         summary.sharedCardEfficiency,
@@ -1740,6 +1744,7 @@ export function listCubeArchetypeReconstructionRows(
       `SELECT
         cube_run_id AS cubeRunId,
         pipeline_run_id AS pipelineRunId,
+        config_hash AS configHash,
         period_id AS periodId,
         archetype_family AS archetypeFamily,
         reconstruction_score AS reconstructionScore,
@@ -1757,6 +1762,7 @@ export function listCubeArchetypeReconstructionRows(
 
   return rows.map((row) => ({
     archetypeFamily: String(row.archetypeFamily),
+    configHash: String(row.configHash),
     cubeRunId: String(row.cubeRunId),
     includedImportance: Number(row.includedImportance),
     includedTargets: Number(row.includedTargets),
@@ -1780,6 +1786,7 @@ export function getEcosystemDiversitySummary(
       `SELECT
         cube_run_id AS cubeRunId,
         pipeline_run_id AS pipelineRunId,
+        config_hash AS configHash,
         archetypes_above_threshold AS archetypesAboveThreshold,
         periods_represented AS periodsRepresented,
         shared_card_efficiency AS sharedCardEfficiency,
@@ -1795,6 +1802,7 @@ export function getEcosystemDiversitySummary(
 
   return {
     archetypesAboveThreshold: Number(row.archetypesAboveThreshold),
+    configHash: String(row.configHash),
     cubeRunId: String(row.cubeRunId),
     periodsRepresented: Number(row.periodsRepresented),
     pipelineRunId: String(row.pipelineRunId),

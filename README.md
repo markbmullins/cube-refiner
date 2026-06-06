@@ -110,7 +110,7 @@ pnpm dev -- config:save-profile --name historical-modern-v1 --config data/config
 pnpm dev -- db:configs
 ```
 
-Historical stages accept `--config path` and `--profile name`; CLI flags still take precedence over profile values. Effective historical configs are saved in SQLite as `historical:latest`, and pipeline runs persist the effective config hash in run lineage tables. The profile controls enabled sources, archive discovery, per-source include/exclude filters, unknown-date and out-of-range handling, source coverage thresholds, historical scoring normalization, role thresholds, score weights, and manual historical role overrides.
+Historical stages accept `--config path` and `--profile name`; CLI flags still take precedence over profile values. Effective historical configs are saved in SQLite as `historical:latest`, and pipeline runs persist the effective config hash in run lineage tables. The profile controls enabled sources, archive discovery, per-source include/exclude filters, unknown-date and out-of-range handling, source coverage thresholds, historical scoring normalization, role thresholds, score weights, manual historical role overrides, archetype reconstruction targets, and ecosystem diversity thresholds.
 
 Run the historical stages in order:
 
@@ -294,7 +294,7 @@ Measure historical archetype reconstruction for a generated cube:
 pnpm dev -- cube:reconstruct --cube-run-id <cube-run-id> --pipeline-run-id <period-matrix-run-id>
 ```
 
-Reconstruction derives archetype-period targets from `card_period_matrix`, evaluates which core, support, glue, signpost, and optional package cards made the cube, and writes `archetype_reconstruction.csv`, `era_coverage.csv`, and `ecosystem_diversity_report.csv`. Missing core cards are persisted as warnings on the affected set-release period rows.
+Reconstruction derives archetype-period targets from `card_period_matrix`, evaluates which core, support, glue, signpost, and optional package cards made the cube, and writes `archetype_reconstruction.csv`, `era_coverage.csv`, and `ecosystem_diversity_report.csv`. Config profiles can enable or disable archetype families, add manual package targets, tune per-archetype thresholds, cap parasitic packages, and set ecosystem diversity targets. Missing or under-supported configured targets are persisted as warnings on the affected set-release period rows.
 
 Validate a generated cube:
 

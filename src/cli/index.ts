@@ -90,7 +90,7 @@ Usage:
   cube-refiner score:historical [--db path] [--config path] [--profile name] --pipeline-run-id id [--aggregate-pipeline-run-id id] [--era-share n] [--pillar-longevity n] [--pillar-peak n] [--icon-peak n] [--flash-peak n] [--flash-max-longevity n] [--weight-glue n] [--weight-longevity n] [--weight-peak n] [--weight-archetype n]
   cube-refiner candidates:generate [--db path] --pipeline-run-id id [--output-dir path]
   cube-refiner cube:generate [--db path] --pipeline-run-id id [--cube-run-id id] [--output-csv path] [--mode aggregate|historical] [--min-format-pillars n] [--min-archetype-icons n] [--min-periods n]
-  cube-refiner cube:reconstruct [--db path] --cube-run-id id --pipeline-run-id id [--reconstruction-csv path] [--era-coverage-csv path] [--ecosystem-csv path]
+  cube-refiner cube:reconstruct [--db path] [--config path] [--profile name] --cube-run-id id --pipeline-run-id id [--reconstruction-csv path] [--era-coverage-csv path] [--ecosystem-csv path]
   cube-refiner cube:validate [--db path] --cube-run-id id [--validation-run-id id] [--output-csv path]
   cube-refiner cube:validate:historical [--db path] --cube-run-id id --pipeline-run-id id [--validation-run-id id] [--historical-validation-csv path] [--historical-period-csv path] [--historical-reconstruction-csv path]
 
@@ -563,12 +563,20 @@ if (command === "cube:reconstruct") {
     saveEffectiveHistoricalConfig(database, historicalConfig.config, historicalConfig.configHash);
     const summary = evaluateCubeReconstruction(database, {
       archetypeReconstructionCsvPath: getOptionValue("--reconstruction-csv") ?? historicalConfig.config.exports.archetypeReconstructionCsv,
+      configHash: historicalConfig.configHash,
       coreShare: parseNumberOption(getOptionValue("--core-share")) ?? historicalConfig.config.archetypeReconstruction.coreShare,
       cubeRunId,
+      disabledArchetypeFamilies: historicalConfig.config.archetypeReconstruction.disabledArchetypeFamilies,
+      ecosystemDiversity: historicalConfig.config.archetypeReconstruction.ecosystemDiversity,
+      enabledArchetypeFamilies: historicalConfig.config.archetypeReconstruction.enabledArchetypeFamilies,
       ecosystemDiversityCsvPath: getOptionValue("--ecosystem-csv") ?? historicalConfig.config.exports.ecosystemDiversityCsv,
       eraCoverageCsvPath: getOptionValue("--era-coverage-csv") ?? historicalConfig.config.exports.eraCoverageCsv,
+      manualOverrides: historicalConfig.config.archetypeReconstruction.manualOverrides,
+      parasiticPackageCaps: historicalConfig.config.archetypeReconstruction.parasiticPackageCaps,
+      perArchetype: historicalConfig.config.archetypeReconstruction.perArchetype,
       pipelineRunId,
       reconstructionThreshold: parseNumberOption(getOptionValue("--reconstruction-threshold")) ?? historicalConfig.config.archetypeReconstruction.reconstructionThreshold,
+      sharedGlueBonus: historicalConfig.config.archetypeReconstruction.sharedGlueBonus,
       signpostShare: parseNumberOption(getOptionValue("--signpost-share")) ?? historicalConfig.config.archetypeReconstruction.signpostShare,
       supportShare: parseNumberOption(getOptionValue("--support-share")) ?? historicalConfig.config.archetypeReconstruction.supportShare
     });

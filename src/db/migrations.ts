@@ -547,6 +547,17 @@ CREATE INDEX IF NOT EXISTS idx_raw_decks_active_status ON raw_decks(active, coll
 ALTER TABLE historical_card_scores ADD COLUMN config_hash TEXT NOT NULL DEFAULT '';
 CREATE INDEX IF NOT EXISTS idx_historical_card_scores_config_hash ON historical_card_scores(config_hash);
 `
+  },
+  {
+    description: "Reconstruction config hashes",
+    id: "0013_reconstruction_config_hashes",
+    sql: `
+ALTER TABLE archetype_reconstruction_targets ADD COLUMN config_hash TEXT NOT NULL DEFAULT '';
+ALTER TABLE cube_archetype_reconstruction ADD COLUMN config_hash TEXT NOT NULL DEFAULT '';
+ALTER TABLE ecosystem_diversity_summaries ADD COLUMN config_hash TEXT NOT NULL DEFAULT '';
+CREATE INDEX IF NOT EXISTS idx_reconstruction_targets_config_hash ON archetype_reconstruction_targets(config_hash);
+CREATE INDEX IF NOT EXISTS idx_cube_reconstruction_config_hash ON cube_archetype_reconstruction(config_hash);
+`
   }
 ];
 

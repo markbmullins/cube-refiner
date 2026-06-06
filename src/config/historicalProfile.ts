@@ -26,6 +26,22 @@ export type HistoricalScoreManualOverride = {
   readonly reason?: string;
 };
 
+export type HistoricalArchetypeReconstructionOverride = {
+  readonly archetypeFamily: string;
+  readonly cardName: string;
+  readonly targetRole: "core" | "support" | "glue" | "signpost" | "optional";
+  readonly periodId?: string;
+  readonly importance?: number;
+};
+
+export type HistoricalPerArchetypeReconstructionConfig = {
+  readonly minimumReconstructionScore?: number;
+  readonly minimumCoreCards?: number;
+  readonly minimumSupportCards?: number;
+  readonly minimumSignposts?: number;
+  readonly periodIds?: readonly string[];
+};
+
 export type HistoricalPerSourcePolicy = {
   readonly allowArchiveDiscovery: boolean;
   readonly discoveryOptions: Readonly<Record<string, string>>;
@@ -87,6 +103,18 @@ export type HistoricalModernConfig = {
     readonly supportShare: number;
     readonly signpostShare: number;
     readonly reconstructionThreshold: number;
+    readonly enabledArchetypeFamilies: readonly string[];
+    readonly disabledArchetypeFamilies: readonly string[];
+    readonly sharedGlueBonus: number;
+    readonly parasiticPackageCaps: Readonly<Record<string, number>>;
+    readonly manualOverrides: readonly HistoricalArchetypeReconstructionOverride[];
+    readonly perArchetype: Readonly<Record<string, HistoricalPerArchetypeReconstructionConfig>>;
+    readonly ecosystemDiversity: {
+      readonly minimumReconstructedArchetypeFamilies: number;
+      readonly minimumRepresentedPeriods: number;
+      readonly minimumSharedCardEfficiency: number;
+      readonly maximumSingleArchetypeDominance: number;
+    };
   };
   readonly cubeGeneration: {
     readonly mode: "aggregate" | "historical";
@@ -162,6 +190,7 @@ export function validateHistoricalModernConfig(value: unknown): HistoricalModern
   const thresholds = requireRecord(scoring.thresholds, "scoring.thresholds");
   const weights = requireRecord(scoring.weights, "scoring.weights");
   const archetypeReconstruction = requireRecord(config.archetypeReconstruction, "archetypeReconstruction");
+  const ecosystemDiversity = requireRecord(archetypeReconstruction.ecosystemDiversity, "archetypeReconstruction.ecosystemDiversity");
   const cubeGeneration = requireRecord(config.cubeGeneration, "cubeGeneration");
   const validation = requireRecord(config.validation, "validation");
   const exportsConfig = requireRecord(config.exports, "exports");
@@ -191,7 +220,19 @@ export function validateHistoricalModernConfig(value: unknown): HistoricalModern
   return {
     archetypeReconstruction: {
       coreShare: requireNumber(archetypeReconstruction.coreShare, "archetypeReconstruction.coreShare"),
+      disabledArchetypeFamilies: requireStringArray(archetypeReconstruction.disabledArchetypeFamilies, "archetypeReconstruction.disabledArchetypeFamilies"),
+      ecosystemDiversity: {
+        maximumSingleArchetypeDominance: requireNumber(ecosystemDiversity.maximumSingleArchetypeDominance, "archetypeReconstruction.ecosystemDiversity.maximumSingleArchetypeDominance"),
+        minimumReconstructedArchetypeFamilies: requirePositiveInteger(ecosystemDiversity.minimumReconstructedArchetypeFamilies, "archetypeReconstruction.ecosystemDiversity.minimumReconstructedArchetypeFamilies"),
+        minimumRepresentedPeriods: requirePositiveInteger(ecosystemDiversity.minimumRepresentedPeriods, "archetypeReconstruction.ecosystemDiversity.minimumRepresentedPeriods"),
+        minimumSharedCardEfficiency: requireNumber(ecosystemDiversity.minimumSharedCardEfficiency, "archetypeReconstruction.ecosystemDiversity.minimumSharedCardEfficiency")
+      },
+      enabledArchetypeFamilies: requireStringArray(archetypeReconstruction.enabledArchetypeFamilies, "archetypeReconstruction.enabledArchetypeFamilies"),
+      manualOverrides: requireReconstructionOverrides(archetypeReconstruction.manualOverrides),
+      parasiticPackageCaps: requireNumberRecord(archetypeReconstruction.parasiticPackageCaps, "archetypeReconstruction.parasiticPackageCaps"),
+      perArchetype: requirePerArchetypeReconstruction(archetypeReconstruction.perArchetype),
       reconstructionThreshold: requireNumber(archetypeReconstruction.reconstructionThreshold, "archetypeReconstruction.reconstructionThreshold"),
+      sharedGlueBonus: requireNumber(archetypeReconstruction.sharedGlueBonus, "archetypeReconstruction.sharedGlueBonus"),
       signpostShare: requireNumber(archetypeReconstruction.signpostShare, "archetypeReconstruction.signpostShare"),
       supportShare: requireNumber(archetypeReconstruction.supportShare, "archetypeReconstruction.supportShare")
     },
@@ -407,6 +448,43 @@ function requireManualOverrides(value: unknown): readonly HistoricalScoreManualO
       scoreAdjustment: record.scoreAdjustment === undefined ? undefined : requireNumber(record.scoreAdjustment, `scoring.manualOverrides[${index}].scoreAdjustment`)
     };
   });
+}
+
+function requireReconstructionOverrides(value: unknown): readonly HistoricalArchetypeReconstructionOverride[] {
+  return requireArray(value, "archetypeReconstruction.manualOverrides").map((entry, index) => {
+    const record = requireRecord(entry, `archetypeReconstruction.manualOverrides[${index}]`);
+    return {
+      archetypeFamily: requireString(record.archetypeFamily, `archetypeReconstruction.manualOverrides[${index}].archetypeFamily`),
+      cardName: requireString(record.cardName, `archetypeReconstruction.manualOverrides[${index}].cardName`),
+      importance: record.importance === undefined ? undefined : requireNumber(record.importance, `archetypeReconstruction.manualOverrides[${index}].importance`),
+      periodId: record.periodId === undefined ? undefined : requireString(record.periodId, `archetypeReconstruction.manualOverrides[${index}].periodId`),
+      targetRole: requireStringUnion(record.targetRole, `archetypeReconstruction.manualOverrides[${index}].targetRole`, ["core", "support", "glue", "signpost", "optional"])
+    };
+  });
+}
+
+function requirePerArchetypeReconstruction(value: unknown): Readonly<Record<string, HistoricalPerArchetypeReconstructionConfig>> {
+  const record = requireRecord(value, "archetypeReconstruction.perArchetype");
+  return Object.fromEntries(
+    Object.entries(record).map(([archetypeFamily, entry]) => {
+      const config = requireRecord(entry, `archetypeReconstruction.perArchetype.${archetypeFamily}`);
+      return [
+        archetypeFamily,
+        {
+          minimumCoreCards: config.minimumCoreCards === undefined ? undefined : requirePositiveInteger(config.minimumCoreCards, `archetypeReconstruction.perArchetype.${archetypeFamily}.minimumCoreCards`),
+          minimumReconstructionScore: config.minimumReconstructionScore === undefined ? undefined : requireNumber(config.minimumReconstructionScore, `archetypeReconstruction.perArchetype.${archetypeFamily}.minimumReconstructionScore`),
+          minimumSignposts: config.minimumSignposts === undefined ? undefined : requirePositiveInteger(config.minimumSignposts, `archetypeReconstruction.perArchetype.${archetypeFamily}.minimumSignposts`),
+          minimumSupportCards: config.minimumSupportCards === undefined ? undefined : requirePositiveInteger(config.minimumSupportCards, `archetypeReconstruction.perArchetype.${archetypeFamily}.minimumSupportCards`),
+          periodIds: config.periodIds === undefined ? undefined : requireStringArray(config.periodIds, `archetypeReconstruction.perArchetype.${archetypeFamily}.periodIds`)
+        }
+      ];
+    })
+  );
+}
+
+function requireNumberRecord(value: unknown, name: string): Readonly<Record<string, number>> {
+  const record = requireRecord(value, name);
+  return Object.fromEntries(Object.entries(record).map(([key, entry]) => [key, requireNumber(entry, `${name}.${key}`)]));
 }
 
 function requirePerSourcePolicy(value: unknown): Readonly<Record<HistoricalCollectorSource, HistoricalPerSourcePolicy>> {
